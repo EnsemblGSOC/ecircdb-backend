@@ -1,8 +1,12 @@
+.vscode
+*.swp
+
 *.pyc
 *.pot
 *.log
 __pycache__/
+media/*
+migrations/
 
 .env
 db.sqlite3
-

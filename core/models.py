@@ -1,3 +1,25 @@
 from django.db import models
 
-# Create your models here.
+
+class Species(models.Model):
+    """
+    This model holds general information about a spieces
+    """
+
+    name = models.CharField(
+        max_length=127,
+    )
+    thumbnail = models.FileField(
+        upload_to='species_thumbnails/',
+        null=True,
+        blank=True
+    )
+    description = models.TextField(
+        blank=True
+    )
+
+    class Meta:
+        verbose_name_plural = "species"
+
+    def __str__(self):
+        return self.name
