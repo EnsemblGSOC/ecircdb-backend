@@ -30,5 +30,9 @@ $ python manage.py migrate
 ```shell
 $ python manage.py createsuperuser
 ```
+6. Start the server
+```shell
+$ python manage.py runserver
+```
 7. Visit `localhost:8000/control` and login using the account created in above step. This is the admin panel from where data can be added, deleted or modified.
 8. Check other urls from the list at `localhost:8000`
