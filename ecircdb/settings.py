@@ -58,6 +58,11 @@ REST_FRAMEWORK = {
 
 ROOT_URLCONF = 'ecircdb.urls'
 
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, "static"),
+    '/var/www/static/',
+]
+
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
