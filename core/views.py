@@ -10,8 +10,9 @@ class SpeciesList(generics.ListAPIView):
     """
 
     filter_backends = (filters.SearchFilter,)
+    ordering = ('name', )
     pagination_class = None
-    queryset = Species.objects.all()
+    queryset = Species.objects.all().order_by('name')
     serializer_class = SpeciesSerializer
     search_fields = ['name']
 

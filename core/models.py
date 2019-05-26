@@ -20,6 +20,7 @@ class Species(models.Model):
 
     class Meta:
         verbose_name_plural = "species"
+        ordering = ('name', )
 
     def __str__(self):
         return self.name
