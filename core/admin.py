@@ -1,5 +1,5 @@
 from django.contrib import admin
 
-from core.models import Species
+from core.models import Species, Sample
 
-admin.site.register(Species)
+admin.site.register((Species, Sample))
