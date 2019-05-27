@@ -1,7 +1,7 @@
 from rest_framework import filters, generics, permissions
 
 from core.models import Species
-from core.serializers import SpeciesSerializer
+from core.serializers import SpeciesDetailSerializer, SpeciesListSerializer
 
 
 class SpeciesList(generics.ListAPIView):
@@ -13,7 +13,7 @@ class SpeciesList(generics.ListAPIView):
     ordering = ('name', )
     pagination_class = None
     queryset = Species.objects.all().order_by('name')
-    serializer_class = SpeciesSerializer
+    serializer_class = SpeciesListSerializer
     search_fields = ['name']
 
 
@@ -23,4 +23,4 @@ class SpeciesDetail(generics.RetrieveAPIView):
     """
 
     queryset = Species.objects.all()
-    serializer_class = SpeciesSerializer
+    serializer_class = SpeciesDetailSerializer

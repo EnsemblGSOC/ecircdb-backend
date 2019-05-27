@@ -1,13 +1,35 @@
 from rest_framework import serializers
 
-from core.models import Species
+from core.models import Species, Sample
 
 
-class SpeciesSerializer(serializers.ModelSerializer):
+class SpeciesListSerializer(serializers.ModelSerializer):
     """
-    Serializers for Species object
+    Serializers for List view of Species object
     """
 
     class Meta:
         model = Species
-        fields = ("taxon_id", "name", "thumbnail", "description")
+        fields = "__all__"
+
+
+class SampleSerializer(serializers.ModelSerializer):
+    """
+    Serializers for Sample Object
+    """
+
+    class Meta:
+        model = Sample
+        fields = "__all__"
+
+
+class SpeciesDetailSerializer(serializers.ModelSerializer):
+    """
+    Serializers for Detail view of Species object
+    """
+
+    samples = SampleSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Species
+        fields = "__all__"
