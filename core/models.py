@@ -6,6 +6,7 @@ class Species(models.Model):
     This model holds general information about a spieces
     """
 
+    taxon_id = models.IntegerField(primary_key=True)
     name = models.CharField(
         max_length=127,
     )

@@ -10,4 +10,4 @@ class SpeciesSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Species
-        fields = ("id", "name", "thumbnail", "description")
+        fields = ("taxon_id", "name", "thumbnail", "description")
