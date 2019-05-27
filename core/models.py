@@ -75,3 +75,6 @@ class Sample(models.Model):
         on_delete=models.CASCADE,
         related_name='samples'
     )
+
+    def __str__(self):
+        return self.source+'-'+self.submitter
