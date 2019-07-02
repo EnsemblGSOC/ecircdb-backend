@@ -10,7 +10,12 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/2.2/ref/settings/
 """
 
+import environ
 import os
+
+root = environ.Path(__file__) - 3  # three folder back (/a/b/c/ - 3 = /)
+env = environ.Env(DEBUG=(bool, True),)  # set default values and casting
+environ.Env.read_env('.env')  # reading .env file
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -23,9 +28,9 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SECRET_KEY = '2&p7(+mq2%wis&f)^nh25!h4r=83)n3&n4#mwm%lyi+s%ki$)$'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = env.bool('DEBUG')
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -87,8 +92,12 @@ WSGI_APPLICATION = 'ecircdb.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': env.str('DB_DATABASE', 'ecircdb'),
+        'USER': env.str('DB_USER'),
+        'PASSWORD': env.str('DB_PASSWORD'),
+        'HOST': env.str('DB_HOST', ''),
+        'PORT': env.str('DB_PORT', '')
     }
 }
 
