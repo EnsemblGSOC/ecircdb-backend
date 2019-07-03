@@ -1,5 +1,7 @@
+from django.apps import apps
 from django.contrib import admin
 
-from core.models import Species, Sample
+app = apps.get_app_config('core')
 
-admin.site.register((Species, Sample))
+for model_name, model in app.models.items():
+    admin.site.register(model)
