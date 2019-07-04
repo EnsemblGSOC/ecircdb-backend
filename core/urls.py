@@ -5,7 +5,11 @@ from core import views
 
 urlpatterns = [
     path('species/', views.SpeciesList.as_view()),
-    path('species/<int:pk>', views.SpeciesDetail.as_view())
+    path('species/<int:pk>', views.SpeciesDetail.as_view()),
+    path('species_view_stats/<int:species_id>/<int:assembly_id>/',
+         views.species_view_stats),
+    path('sample_view_stats/<int:species_id>/<int:assembly_id>/<int:sample_id>/',
+         views.sample_view_stats)
 ]
 
 # urlpatterns = format_suffix_patterns(urlpatterns)
