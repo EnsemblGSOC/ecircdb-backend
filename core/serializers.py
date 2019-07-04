@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from core.models import Species, Sample
+from core.models import Assembly, Species, Sample
 
 
 class SpeciesListSerializer(serializers.ModelSerializer):
@@ -13,7 +13,27 @@ class SpeciesListSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-class SampleSerializer(serializers.ModelSerializer):
+class AssemblySerializer(serializers.ModelSerializer):
+    """
+    Serializers for Assembly Object
+    """
+
+    class Meta:
+        model = Assembly
+        exclude = ('species_id',)
+
+
+class SampleListSerializer(serializers.ModelSerializer):
+    """
+    Serializers for Sample Object
+    """
+
+    class Meta:
+        model = Sample
+        fields = ('sample_id', 'accession', 'source', 'description',)
+
+
+class SampleDetailsSerializer(serializers.ModelSerializer):
     """
     Serializers for Sample Object
     """
@@ -25,10 +45,10 @@ class SampleSerializer(serializers.ModelSerializer):
 
 class SpeciesDetailSerializer(serializers.ModelSerializer):
     """
-    Serializers for Detail view of Species object
+    Serializers for Detail view of Species object having list of assemblies
     """
 
-    samples = SampleSerializer(many=True, read_only=True)
+    assemblies = AssemblySerializer(many=True, read_only=True)
 
     class Meta:
         model = Species

@@ -4,6 +4,11 @@ from rest_framework.response import Response
 
 from core.models import Species, Assembly
 from core.serializers import SpeciesDetailSerializer, SpeciesListSerializer
+import django_filters
+from rest_framework import filters, generics, permissions
+
+from core.models import Species, Sample
+from core.serializers import SpeciesDetailSerializer, SpeciesListSerializer, SampleListSerializer, SampleDetailsSerializer
 
 
 class SpeciesList(generics.ListAPIView):
@@ -26,6 +31,51 @@ class SpeciesDetail(generics.RetrieveAPIView):
 
     queryset = Species.objects.all()
     serializer_class = SpeciesDetailSerializer
+
+
+class SampleFilter(django_filters.FilterSet):
+    """
+    Filter parameters for Samples
+    """
+
+    accession = django_filters.CharFilter(
+        'accession', lookup_expr='icontains')
+    source = django_filters.CharFilter('source', lookup_expr='icontains')
+    description = django_filters.CharFilter(
+        'description', lookup_expr='icontains')
+
+    class Meta:
+        model = Sample
+        fields = ['accession', 'source', 'description']
+
+
+class SampleList(generics.ListAPIView):
+    """
+    View to list and search of samples
+    """
+
+    serializer_class = SampleListSerializer
+    pagination_class = None
+    filter_backends = (django_filters.rest_framework.DjangoFilterBackend,
+                       filters.SearchFilter)
+    filter_class = SampleFilter
+
+    def get_queryset(self):
+        """
+        This view should return a list of all the samples of
+        the species as determined by the species portion of the URL.
+        """
+        species = self.kwargs['species']
+        return Sample.objects.filter(species_id=species)
+
+
+class SampleDetail(generics.RetrieveAPIView):
+    """
+    View to get details of a sample
+    """
+
+    queryset = Sample.objects.all()
+    serializer_class = SampleDetailsSerializer
 
 
 @api_view(['GET'])
