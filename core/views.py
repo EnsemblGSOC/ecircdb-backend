@@ -17,11 +17,11 @@ class SpeciesList(generics.ListAPIView):
     """
 
     filter_backends = (filters.SearchFilter,)
-    ordering = ('name', )
+    ordering = ('scietific_name', )
     pagination_class = None
-    queryset = Species.objects.all().order_by('name')
+    queryset = Species.objects.all().order_by('scientific_name')
     serializer_class = SpeciesListSerializer
-    search_fields = ['name']
+    search_fields = ['scientific_name', 'common_name']
 
 
 class SpeciesDetail(generics.RetrieveAPIView):
@@ -115,4 +115,4 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
     except:
         return Response(data={'error': 'No assembly with the given id under the given species.'}, status=status.HTTP_404_NOT_FOUND)
 
-    return Response(data={'species': [species.name, species.description], 'assembly': assembly.assembly_name}, status=status.HTTP_200_OK)
+    return Response(data={'species': [species.scientific_name, species.description], 'assembly': assembly.assembly_name}, status=status.HTTP_200_OK)

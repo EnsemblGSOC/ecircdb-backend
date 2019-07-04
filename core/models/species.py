@@ -9,8 +9,13 @@ class Species(models.Model):
     taxon_id = models.AutoField(
         primary_key=True
     )
-    name = models.CharField(
+    scientific_name = models.CharField(
         max_length=127
+    )
+    common_name = models.CharField(
+        max_length=127,
+        null=True,
+        blank=True
     )
     thumbnail = models.FileField(
         upload_to='species_thumbnails/',
@@ -23,7 +28,7 @@ class Species(models.Model):
 
     class Meta:
         verbose_name_plural = "species"
-        ordering = ('name', )
+        ordering = ('scientific_name', )
 
     def __str__(self):
-        return self.name
+        return self.scientific_name
