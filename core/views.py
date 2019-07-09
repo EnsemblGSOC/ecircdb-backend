@@ -65,8 +65,8 @@ class SampleList(generics.ListAPIView):
         This view should return a list of all the samples of
         the species as determined by the species portion of the URL.
         """
-        species = self.kwargs['species']
-        return Sample.objects.filter(species_id=species)
+        species_id = self.kwargs['species_id']
+        return Sample.objects.filter(species_id=species_id)
 
 
 class SampleDetail(generics.RetrieveAPIView):
