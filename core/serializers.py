@@ -30,7 +30,7 @@ class SampleListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Sample
-        fields = ('sample_id', 'accession', 'source', 'description',)
+        fields = ('sample_id', 'accession', 'source', 'description', 'library_size')
 
 
 class SampleDetailsSerializer(serializers.ModelSerializer):
