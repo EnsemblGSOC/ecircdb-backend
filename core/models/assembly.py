@@ -17,6 +17,9 @@ class Assembly(models.Model):
     assembly_name = models.CharField(
         max_length=255
     )
+    assembly_genoverse_genome = models.CharField(
+        max_length=255
+    )
     species_id = models.ForeignKey(
         Species,
         on_delete=models.CASCADE,

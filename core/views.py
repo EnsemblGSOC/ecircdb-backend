@@ -138,4 +138,4 @@ def location_view_stats(request, species_id, assembly_id):
     except:
         return Response(data={'error': 'No assembly with the given id under the given species.'}, status=status.HTTP_404_NOT_FOUND)
 
-    return Response(data={'species': [species.scientific_name, species.description], 'assembly': assembly.assembly_name}, status=status.HTTP_200_OK)
+    return Response(data={'species': [species.scientific_name, species.description], 'genome': assembly.assembly_genoverse_genome}, status=status.HTTP_200_OK)
