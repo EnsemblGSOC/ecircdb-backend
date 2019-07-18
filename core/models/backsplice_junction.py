@@ -117,6 +117,18 @@ class BackspliceJunction(models.Model):
         blank=True,
         null=True
     )
+    transcript_count = models.IntegerField(
+        blank=True,
+        null=True
+    )
+    gc_perc = models.IntegerField(
+        blank=True,
+        null=True
+    )
+    abundance_ratio = models.IntegerField(
+        blank=True,
+        null=True
+    )
 
     def __str__(self):
         return self.junction_id

@@ -35,6 +35,11 @@ class Sample(models.Model):
         blank=True,
         null=True
     )
+    bigwig_path = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True
+    )
     ftp_path = models.CharField(
         max_length=255,
         blank=True,
@@ -49,12 +54,17 @@ class Sample(models.Model):
         blank=True,
         null=True
     )
-    library_stratergy = models.CharField(
+    library_strategy = models.CharField(
         max_length=255,
         blank=True,
         null=True
     )
-    gtag_cjunks_reads = models.IntegerField(
+    project = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True
+    )
+    gtag_cjuncs_reads = models.IntegerField(
         blank=True,
         null=True
     )
@@ -81,7 +91,11 @@ class Sample(models.Model):
         blank=True,
         null=True
     )
-    total_splice_reads = models.IntegerField(
+    total_spliced_reads = models.IntegerField(
+        blank=True,
+        null=True
+    )
+    TIN = models.IntegerField(
         blank=True,
         null=True
     )

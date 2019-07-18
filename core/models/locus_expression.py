@@ -11,14 +11,6 @@ class LocusExpression(models.Model):
     expression_id = models.AutoField(
         primary_key=True
     )
-    deseq_normalised = models.IntegerField(
-        blank=True,
-        null=True
-    )
-    fpkm = models.IntegerField(
-        blank=True,
-        null=True
-    )
     rpkm = models.IntegerField(
         blank=True,
         null=True
@@ -32,6 +24,10 @@ class LocusExpression(models.Model):
         null=True
     )
     rpkm_ratio = models.IntegerField(
+        blank=True,
+        null=True
+    )
+    raw_count = models.IntegerField(
         blank=True,
         null=True
     )
