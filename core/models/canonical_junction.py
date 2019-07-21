@@ -78,4 +78,4 @@ class CanonicalJunction(models.Model):
     )
 
     def __str__(self):
-        return self.junction_id
+        return str(self.junction_id)

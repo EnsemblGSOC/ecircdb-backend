@@ -92,4 +92,4 @@ class Locus(models.Model):
         verbose_name_plural = 'Loci'
 
     def __str__(self):
-        return self.locus_id
+        return str(self.locus_id)
