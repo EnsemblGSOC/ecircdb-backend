@@ -2,7 +2,7 @@ from rest_framework import filters, generics, permissions, status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
-from core.models import Species, Assembly, Analysis
+from core.models import Species, Assembly, Analysis, BackspliceJunction
 from core.serializers import SpeciesDetailSerializer, SpeciesListSerializer
 import django_filters
 from rest_framework import filters, generics, permissions
@@ -98,7 +98,33 @@ def species_view_stats(request, species_id, assembly_id):
     except:
         return Response(data={'error': 'No assembly with the given id under the given species.'}, status=status.HTTP_404_NOT_FOUND)
 
-    return Response(data={'species': [species.scientific_name, species.description], 'assembly': assembly.assembly_name}, status=status.HTTP_200_OK)
+    # Get all of the analyses related to given assembly
+    analyses = Analysis.objects.filter(assembly_id=assembly.assembly_id)
+
+    # Get ids of all the samples for the given assembly
+    sample_id_list = analyses.values_list('sample_id', flat=True)
+    # All the samples particular to given assembly
+    samples = Sample.objects.filter(
+        species_id=species_id, sample_id__in=sample_id_list)
+    count_total_samples = samples.count()
+
+    # List of the distinct type of tissues scanned
+    distinct_tissues = samples.values_list('source', flat=True).distinct()
+    count_distinct_tissues = distinct_tissues.count()
+
+    # Get ids of all analysis related to the given assembly
+    analysis_id_list = analyses.values_list('analysis_id', flat=True)
+    backsplice_junctions = BackspliceJunction.objects.filter(
+        analysis_id__in=analysis_id_list).distinct()
+    count_backsplice_junctions = backsplice_junctions.count()
+
+    data = {'species': species.scientific_name,
+            'assembly': assembly.assembly_name,
+            'count_total_samples': count_total_samples,
+            'count_distinct_tissues': count_distinct_tissues,
+            'count_backsplice_junctions': count_backsplice_junctions}
+
+    return Response(data=data, status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
