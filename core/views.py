@@ -202,7 +202,44 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
     except:
         return Response(data={'error': 'No assembly with the given id under the given species.'}, status=status.HTTP_404_NOT_FOUND)
 
-    return Response(data={'species': [species.scientific_name, species.description], 'assembly': assembly.assembly_name}, status=status.HTTP_200_OK)
+    try:
+        sample = species.samples.get(sample_id=sample_id)
+    except:
+        return Response(data={'error': 'No sample with the given id under the given species.'}, status=status.HTTP_404_NOT_FOUND)
+
+    library_size = str(int(sample.library_size or 0))
+    mapped_reads = str(int(sample.mapped_reads or 0))
+    total_spliced_reads = str(int(sample.total_spliced_reads or 0))
+    canonical_spliced_reads = str(
+        int(sample.total_spliced_reads or 0)-int(sample.backspliced_reads or 0))
+    backspliced_reads = str(int(sample.backspliced_reads or 0))
+    unmapped_reads = str(int(sample.library_size or 0) -
+                         int(sample.mapped_reads or 0))
+
+    sankey_labels = ['Library size ({})'.format(library_size),
+                     'Mapped reads ({})'.format(mapped_reads),
+                     'Total spliced reads ({})'.format(total_spliced_reads),
+                     'Canonical spliced reads ({})'.format(
+                         canonical_spliced_reads),
+                     'Backspliced reads ({})'.format(backspliced_reads),
+                     'Unmapped reads ({})'.format(unmapped_reads)
+                     ]
+
+    sankey_values = [int(sample.mapped_reads or 0), int(sample.total_spliced_reads or 0),
+                     int(sample.total_spliced_reads or 0) -
+                     int(sample.backspliced_reads or 0),
+                     int(sample.backspliced_reads or 0),
+                     int(sample.library_size or 0) -
+                     int(sample.mapped_reads or 0)
+                     ]
+    sankey = {'sankey_labels': sankey_labels,
+              'sankey_values': sankey_values}
+
+    data = {'species': species.scientific_name,
+            'assembly': assembly.assembly_name,
+            'sankey': sankey
+            }
+    return Response(data=data, status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
