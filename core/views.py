@@ -1,16 +1,17 @@
+import django_filters
+
+from django.conf import settings
 from django.db import connection
+from django.views.decorators.cache import cache_page
 import pandas as pd
 from rest_framework import filters, generics, permissions, status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
-from core.models import Species, Assembly, Analysis, BackspliceJunction
-from core.serializers import SpeciesDetailSerializer, SpeciesListSerializer
-import django_filters
-from rest_framework import filters, generics, permissions
-
-from core.models import Species, Sample
+from core.models import Species, Assembly, Analysis, BackspliceJunction, Sample
 from core.serializers import SpeciesDetailSerializer, SpeciesListSerializer, SampleListSerializer, SampleDetailsSerializer
+
+caching_time = 60*5 if settings.DEBUG else 10*24*60*60
 
 
 class SpeciesList(generics.ListAPIView):
@@ -84,6 +85,7 @@ class SampleDetail(generics.RetrieveAPIView):
 
 
 @api_view(['GET'])
+@cache_page(caching_time)
 def species_view_stats(request, species_id, assembly_id):
     """
     View to get stats for the species view
@@ -186,6 +188,7 @@ def species_view_stats(request, species_id, assembly_id):
 
 
 @api_view(['GET'])
+@cache_page(caching_time)
 def sample_view_stats(request, species_id, assembly_id, sample_id):
     """
     View to get stats for the sample view
@@ -243,6 +246,7 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
 
 
 @api_view(['GET'])
+@cache_page(caching_time)
 def location_view_stats(request, species_id, assembly_id):
     """
     View to get stats for the sample view
