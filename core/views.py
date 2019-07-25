@@ -102,46 +102,62 @@ def species_view_stats(request, species_id, assembly_id):
     except:
         return Response(data={'error': 'No assembly with the given id under the given species.'}, status=status.HTTP_404_NOT_FOUND)
 
-    # Get all of the analyses related to given assembly
-    analyses = Analysis.objects.filter(assembly_id=assembly.assembly_id)
+    # List of all samples related to the given assembly
+    sample_query = 'select source, sample_id from core_sample where sample_id in (select sample_id_id from core_analysis where assembly_id_id={});'.format(
+        assembly.assembly_id)
+    sample_df = pd.read_sql_query(sample_query, connection)
 
-    # Get ids of all the samples for the given assembly
-    sample_id_list = analyses.values_list('sample_id', flat=True)
-    # All the samples particular to given assembly
-    samples = Sample.objects.filter(
-        species_id=species_id, sample_id__in=sample_id_list)
-    count_total_samples = samples.count()
+    # List of locus expression related to the given assembly
+    locus_expression_query = 'select tpm, analysis_id_id from core_locusexpression where analysis_id_id in (select analysis_id from core_analysis where assembly_id_id={});'.format(
+        assembly.assembly_id)
+    locusexpression_df = pd.read_sql_query(locus_expression_query, connection)
 
-    # List of the distinct type of tissues scanned
-    distinct_tissues = samples.values_list('source', flat=True).distinct()
-    count_distinct_tissues = distinct_tissues.count()
+    # List of all locus for a given assembly
+    locus_query = 'select locus_id, nexons from core_locus where assembly_id_id={};'.format(
+        assembly.assembly_id)
+    locus_df = pd.read_sql_query(locus_query, connection)
 
-    # Get ids of all analysis related to the given assembly
-    analysis_id_list = analyses.values_list('analysis_id', flat=True)
-    backsplice_junctions = BackspliceJunction.objects.filter(
-        analysis_id__in=analysis_id_list).distinct()
-    count_backsplice_junctions = backsplice_junctions.count()
+    # List of all analysis related to the assembly
+    analysis_query = 'select sample_id_id, analysis_id from core_analysis where assembly_id_id={};'.format(
+        assembly.assembly_id)
+    analysis_df = pd.read_sql_query(analysis_query, connection)
+
+    # List of all canonical junctions related to given assembly
+    cj_query = 'select locus_id_id from core_canonicaljunction where locus_id_id in (select locus_id from core_locus where assembly_id_id={})'.format(
+        assembly.assembly_id)
+    cj_df = pd.read_sql_query(cj_query, connection)
+
+    # List of all backsplice junctions related to given assembly
+    bj_query = 'select locus_id_id from core_backsplicejunction where locus_id_id in (select locus_id from core_locus where assembly_id_id={})'.format(
+        assembly.assembly_id)
+    bj_df = pd.read_sql_query(bj_query, connection)
+
+    # List of distinct tissues scanned
+    distinct_tissues = sample_df['source'].unique().tolist()
+
+    # Total number of samples for the given assembly
+    count_total_samples = len(sample_df.index)
+
+    # Count of the number of distinct tissues scanned for the assembly
+    count_distinct_tissues = len(distinct_tissues)
+
+    # Count of backsplice junctions related to the given assembly
+    count_backsplice_junctions = len(bj_df)
 
     # Graph for circRNA for each locus
-    circRNA_per_locus_query = 'select locus_id_id, count(*) as count from core_backsplicejunction where locus_id_id in (select locus_id from core_locus where assembly_id_id={}) group by locus_id_id;'.format(
-        assembly.assembly_id)
-    circRNA_per_locus_dataframe = pd.read_sql_query(
-        circRNA_per_locus_query, connection)
+    circRNA_per_locus_df = bj_df['locus_id_id'].groupby(
+        ['locus_id_id']).size().reset_index(name='count')
     circRNA_per_locus = {
-        "locus_id": circRNA_per_locus_dataframe["locus_id_id"].apply(str).to_list(),
-        "count": circRNA_per_locus_dataframe["count"].to_list()
+        "locus_id": circRNA_per_locus_df["locus_id_id"].apply(str).to_list(),
+        "count": circRNA_per_locus_df["count"].to_list()
     }
 
     # Graph for circRNA vs linear transcripts for each locus
-    locus_nexons_query = 'select locus_id, nexons from core_locus where assembly_id_id={};'.format(
-        assembly.assembly_id)
-    cj_query = 'select locus_id_id, count(*) as count from core_canonicaljunction where locus_id_id in (select locus_id from core_locus where assembly_id_id={}) group by locus_id_id;'.format(
-        assembly.assembly_id)
-    locus_nexons_df = pd.read_sql_query(locus_nexons_query, connection)
-    cj_df = pd.read_sql_query(cj_query, connection)
-    locus_cj_df = pd.merge(locus_nexons_df, cj_df,
+    cj_per_locus_df = cj_df.groupby(
+        ['locus_id_id']).size().reset_index(name='count')
+    locus_cj_df = pd.merge(locus_df['locus_id', 'nexons'], cj_per_locus_df['locus_id_id', 'count'],
                            left_on='locus_id', right_on='locus_id_id', how='outer').fillna(0, downcast='infer')
-    locus_cj_bj_df = pd.merge(locus_cj_df, circRNA_per_locus_dataframe,
+    locus_cj_bj_df = pd.merge(locus_cj_df, circRNA_per_locus_df['locus_id_id', 'count'],
                               left_on='locus_id', right_on='locus_id_id', how='outer', suffixes=('_cj', '_bj')).fillna(0, downcast='infer')
     circrna_vs_lt_per_locus = {
         "locus_id": locus_cj_bj_df["locus_id"].to_list(),
@@ -152,17 +168,11 @@ def species_view_stats(request, species_id, assembly_id):
     }
 
     # Graph for tissue TPM box plot
-    tpm_query = 'select tpm, analysis_id_id from core_locusexpression where analysis_id_id in (select analysis_id from core_analysis where assembly_id_id={});'.format(
-        assembly.assembly_id)
-    sample_query = 'select source, sample_id from core_sample where sample_id in (select sample_id_id from core_analysis where assembly_id_id={});'.format(
-        assembly.assembly_id)
     sample_analysis_query = 'select analysis_id, sample_id_id from core_analysis where assembly_id_id={};'.format(
         assembly.assembly_id)
-    tpm_df = pd.read_sql_query(tpm_query, connection)
-    sample_df = pd.read_sql_query(sample_query, connection)
     sample_analysis_df = pd.read_sql_query(sample_analysis_query, connection)
     tpm_sample_analysis_df = pd.merge(
-        tpm_df, sample_analysis_df, left_on='analysis_id_id', right_on='analysis_id')
+        locusexpression_df, sample_analysis_df, left_on='analysis_id_id', right_on='analysis_id')
     tpm_sample_merged_df = pd.merge(
         tpm_sample_analysis_df, sample_df, left_on='sample_id_id', right_on='sample_id')
     tpm_sample_grouped_df = tpm_sample_merged_df.groupby(['source'])[
