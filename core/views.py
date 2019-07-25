@@ -1,9 +1,10 @@
 import django_filters
+import numpy as np
+import pandas as pd
 
 from django.conf import settings
 from django.db import connection
 from django.views.decorators.cache import cache_page
-import pandas as pd
 from rest_framework import filters, generics, permissions, status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -145,7 +146,7 @@ def species_view_stats(request, species_id, assembly_id):
     count_backsplice_junctions = len(bj_df)
 
     # Graph for circRNA for each locus
-    circRNA_per_locus_df = bj_df['locus_id_id'].groupby(
+    circRNA_per_locus_df = bj_df[['locus_id_id']].groupby(
         ['locus_id_id']).size().reset_index(name='count')
     circRNA_per_locus = {
         "locus_id": circRNA_per_locus_df["locus_id_id"].apply(str).to_list(),
@@ -153,11 +154,11 @@ def species_view_stats(request, species_id, assembly_id):
     }
 
     # Graph for circRNA vs linear transcripts for each locus
-    cj_per_locus_df = cj_df.groupby(
+    cj_per_locus_df = cj_df[['locus_id_id']].groupby(
         ['locus_id_id']).size().reset_index(name='count')
-    locus_cj_df = pd.merge(locus_df['locus_id', 'nexons'], cj_per_locus_df['locus_id_id', 'count'],
+    locus_cj_df = pd.merge(locus_df[['locus_id', 'nexons']], cj_per_locus_df[['locus_id_id', 'count']],
                            left_on='locus_id', right_on='locus_id_id', how='outer').fillna(0, downcast='infer')
-    locus_cj_bj_df = pd.merge(locus_cj_df, circRNA_per_locus_df['locus_id_id', 'count'],
+    locus_cj_bj_df = pd.merge(locus_cj_df, circRNA_per_locus_df[['locus_id_id', 'count']],
                               left_on='locus_id', right_on='locus_id_id', how='outer', suffixes=('_cj', '_bj')).fillna(0, downcast='infer')
     circrna_vs_lt_per_locus = {
         "locus_id": locus_cj_bj_df["locus_id"].to_list(),
@@ -172,9 +173,11 @@ def species_view_stats(request, species_id, assembly_id):
         assembly.assembly_id)
     sample_analysis_df = pd.read_sql_query(sample_analysis_query, connection)
     tpm_sample_analysis_df = pd.merge(
-        locusexpression_df, sample_analysis_df, left_on='analysis_id_id', right_on='analysis_id')
+        locusexpression_df[['tpm', 'analysis_id_id']], sample_analysis_df, left_on='analysis_id_id', right_on='analysis_id')
     tpm_sample_merged_df = pd.merge(
         tpm_sample_analysis_df, sample_df, left_on='sample_id_id', right_on='sample_id')
+    tpm_sample_merged_df.fillna(0)
+    tpm_sample_merged_df['tpm'] = np.log10(tpm_sample_merged_df['tpm']+1)
     tpm_sample_grouped_df = tpm_sample_merged_df.groupby(['source'])[
         'tpm'].apply(list)
     tpm_grouped_list = tpm_sample_grouped_df.to_dict()
