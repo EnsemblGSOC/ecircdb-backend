@@ -104,7 +104,7 @@ def species_view_stats(request, species_id, assembly_id):
         return Response(data={'error': 'No assembly with the given id under the given species.'}, status=status.HTTP_404_NOT_FOUND)
 
     # List of all samples related to the given assembly
-    sample_query = 'select source, sample_id from core_sample where sample_id in (select sample_id_id from core_analysis where assembly_id_id={});'.format(
+    sample_query = 'select * from core_sample where sample_id in (select sample_id_id from core_analysis where assembly_id_id={});'.format(
         assembly.assembly_id)
     sample_df = pd.read_sql_query(sample_query, connection)
 
@@ -114,7 +114,7 @@ def species_view_stats(request, species_id, assembly_id):
     locusexpression_df = pd.read_sql_query(locus_expression_query, connection)
 
     # List of all locus for a given assembly
-    locus_query = 'select locus_id, nexons from core_locus where assembly_id_id={};'.format(
+    locus_query = 'select * from core_locus where assembly_id_id={};'.format(
         assembly.assembly_id)
     locus_df = pd.read_sql_query(locus_query, connection)
 
@@ -142,8 +142,24 @@ def species_view_stats(request, species_id, assembly_id):
     # Count of the number of distinct tissues scanned for the assembly
     count_distinct_tissues = len(distinct_tissues)
 
+    # Total number of the circRNAs
+    total_circrnas = sample_df['circrna_count'].sum()
+
+    # Sum of the library size
+    sum_library_size = sample_df['library_size'].sum()
+
+    # Total number of circRNA count / sum(library_size)
+    circrna_per_library_size = total_circrnas/sum_library_size
+
+    # circRNA per sample
+    circrna_per_sample = total_circrnas/count_total_samples
+
     # Count of backsplice junctions related to the given assembly
     count_backsplice_junctions = len(bj_df)
+
+    # Number of circRNA producing genes
+    count_circrna_producing_genes = len(
+        locus_df[locus_df.is_circrna_host == True])
 
     # Graph for circRNA for each locus
     circRNA_per_locus_df = bj_df[['locus_id_id']].groupby(
@@ -192,6 +208,9 @@ def species_view_stats(request, species_id, assembly_id):
             'count_total_samples': count_total_samples,
             'count_distinct_tissues': count_distinct_tissues,
             'count_backsplice_junctions': count_backsplice_junctions,
+            'circrna_per_library_size': circrna_per_library_size,
+            'circrna_per_sample': circrna_per_sample,
+            'count_circrna_producing_genes': count_circrna_producing_genes
             'circRNA_per_locus': circRNA_per_locus,
             'circrna_vs_lt_per_locus': circrna_vs_lt_per_locus,
             'tpm_tissue_boxplot': tpm_tissue_boxplot
