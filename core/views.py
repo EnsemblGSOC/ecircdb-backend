@@ -103,34 +103,34 @@ def species_view_stats(request, species_id, assembly_id):
     except:
         return Response(data={'error': 'No assembly with the given id under the given species.'}, status=status.HTTP_404_NOT_FOUND)
 
-    # List of all samples related to the given assembly
-    sample_query = 'select * from core_sample where sample_id in (select sample_id_id from core_analysis where assembly_id_id={});'.format(
+    # List of all analysis related to the assembly
+    analysis_query = 'select sample_id_id, analysis_id from core_analysis where assembly_id_id={};'.format(
         assembly.assembly_id)
+    analysis_df = pd.read_sql_query(analysis_query, connection)
+
+    # List of all samples related to the given assembly
+    sample_query = 'select * from core_sample where sample_id in ({});'.format(
+        str(analysis_df['sample_id_id'].to_list())[1:-1])
     sample_df = pd.read_sql_query(sample_query, connection)
 
     # List of locus expression related to the given assembly
-    locus_expression_query = 'select tpm, analysis_id_id from core_locusexpression where analysis_id_id in (select analysis_id from core_analysis where assembly_id_id={});'.format(
-        assembly.assembly_id)
-    locusexpression_df = pd.read_sql_query(locus_expression_query, connection)
+    locusexpression_query = 'select tpm, analysis_id_id from core_locusexpression where analysis_id_id in ({});'.format(
+        str(analysis_df['analysis_id'].to_list())[1:-1])
+    locusexpression_df = pd.read_sql_query(locusexpression_query, connection)
 
     # List of all locus for a given assembly
     locus_query = 'select * from core_locus where assembly_id_id={};'.format(
         assembly.assembly_id)
     locus_df = pd.read_sql_query(locus_query, connection)
 
-    # List of all analysis related to the assembly
-    analysis_query = 'select sample_id_id, analysis_id from core_analysis where assembly_id_id={};'.format(
-        assembly.assembly_id)
-    analysis_df = pd.read_sql_query(analysis_query, connection)
-
     # List of all canonical junctions related to given assembly
-    cj_query = 'select locus_id_id from core_canonicaljunction where locus_id_id in (select locus_id from core_locus where assembly_id_id={})'.format(
-        assembly.assembly_id)
+    cj_query = 'select locus_id_id from core_canonicaljunction where locus_id_id in ({})'.format(
+        str(locus_df["locus_id"].to_list())[1:-1])
     cj_df = pd.read_sql_query(cj_query, connection)
 
     # List of all backsplice junctions related to given assembly
-    bj_query = 'select locus_id_id from core_backsplicejunction where locus_id_id in (select locus_id from core_locus where assembly_id_id={})'.format(
-        assembly.assembly_id)
+    bj_query = 'select locus_id_id from core_backsplicejunction where locus_id_id in ({})'.format(
+        str(locus_df["locus_id"].to_list())[1:-1])
     bj_df = pd.read_sql_query(bj_query, connection)
 
     # List of distinct tissues scanned
@@ -210,7 +210,7 @@ def species_view_stats(request, species_id, assembly_id):
             'count_backsplice_junctions': count_backsplice_junctions,
             'circrna_per_library_size': circrna_per_library_size,
             'circrna_per_sample': circrna_per_sample,
-            'count_circrna_producing_genes': count_circrna_producing_genes
+            'count_circrna_producing_genes': count_circrna_producing_genes,
             'circRNA_per_locus': circRNA_per_locus,
             'circrna_vs_lt_per_locus': circrna_vs_lt_per_locus,
             'tpm_tissue_boxplot': tpm_tissue_boxplot
@@ -242,6 +242,48 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
     except:
         return Response(data={'error': 'No sample with the given id under the given species.'}, status=status.HTTP_404_NOT_FOUND)
 
+    # List of all analysis related to the given sample
+    analysis_query = 'select * from core_analysis where sample_id_id={}'.format(
+        sample.sample_id)
+    analysis_df = pd.read_sql_query(analysis_query, connection)
+
+    # List of all locus expressions related to the given sample
+    locusexpression_query = 'select * from core_locusexpression where analysis_id_id in ({})'.format(
+        str(analysis_df['analysis_id'].to_list())[1:-1])
+    locusexpression_df = pd.read_sql_query(locusexpression_query, connection)
+
+    locus_query = 'select * from core_locus where locus_id in ({})'.format(
+        str(locusexpression_df['locus_id_id'].to_list())[1:-1])
+    locus_df = pd.read_sql_query(locus_query, connection)
+
+    # List of all canonical junctions related to given assembly
+    cj_query = 'select locus_id_id from core_canonicaljunction where locus_id_id in ({})'.format(
+        str(locus_df["locus_id"].to_list())[1:-1])
+    cj_df = pd.read_sql_query(cj_query, connection)
+
+    # List of all backsplice junctions related to given assembly
+    bj_query = 'select locus_id_id from core_backsplicejunction where locus_id_id in ({})'.format(
+        str(locus_df["locus_id"].to_list())[1:-1])
+    bj_df = pd.read_sql_query(bj_query, connection)
+
+    # Graph for circRNA vs linear transcripts for each locus
+    circRNA_per_locus_df = bj_df[['locus_id_id']].groupby(
+        ['locus_id_id']).size().reset_index(name='count')
+    cj_per_locus_df = cj_df[['locus_id_id']].groupby(
+        ['locus_id_id']).size().reset_index(name='count')
+    locus_cj_df = pd.merge(locus_df[['locus_id', 'nexons']], cj_per_locus_df[['locus_id_id', 'count']],
+                           left_on='locus_id', right_on='locus_id_id', how='outer').fillna(0, downcast='infer')
+    locus_cj_bj_df = pd.merge(locus_cj_df, circRNA_per_locus_df[['locus_id_id', 'count']],
+                              left_on='locus_id', right_on='locus_id_id', how='outer', suffixes=('_cj', '_bj')).fillna(0, downcast='infer')
+    gene_level_bj_vs_cj = {
+        "locus_id": locus_cj_bj_df["locus_id"].to_list(),
+        "count_cj": locus_cj_bj_df["count_cj"].to_list(),
+        "count_bj": locus_cj_bj_df["count_bj"].to_list(),
+        "nexons": locus_cj_bj_df["nexons"].to_list(),
+        "text": "Locus " + locus_cj_bj_df['locus_id'].map(str) + "<br>Exons: " + locus_cj_bj_df['nexons'].map(str)
+    }
+
+    # Sankey flow for the sample
     library_size = str(int(sample.library_size or 0))
     mapped_reads = str(int(sample.mapped_reads or 0))
     total_spliced_reads = str(int(sample.total_spliced_reads or 0))
@@ -270,9 +312,17 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
     sankey = {'sankey_labels': sankey_labels,
               'sankey_values': sankey_values}
 
+    # Graph for gene vs circrna_abundance_ratio
+    gene_vs_circrna_abundance_ratio = {
+        'genes': locus_df['gene_name'].to_list(),
+        'circrna_abundance_ratio': locus_df['circrna_abundance_ratio'].to_list()
+    }
+
     data = {'species': species.scientific_name,
             'assembly': assembly.assembly_name,
-            'sankey': sankey
+            'sankey': sankey,
+            'gene_vs_circrna_abundance_ratio': gene_vs_circrna_abundance_ratio,
+            'gene_level_bj_vs_cj': gene_level_bj_vs_cj
             }
     return Response(data=data, status=status.HTTP_200_OK)
 
