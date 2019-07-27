@@ -1,9 +1,11 @@
+import datetime
 import django_filters
 import numpy as np
 import pandas as pd
 
 from django.conf import settings
 from django.db import connection
+from django.http import HttpResponse, Http404
 from django.views.decorators.cache import cache_page
 from rest_framework import filters, generics, permissions, status
 from rest_framework.decorators import api_view
@@ -123,13 +125,8 @@ def species_view_stats(request, species_id, assembly_id):
         assembly.assembly_id)
     locus_df = pd.read_sql_query(locus_query, connection)
 
-    # List of all canonical junctions related to given assembly
-    cj_query = 'select locus_id_id from core_canonicaljunction where locus_id_id in ({})'.format(
-        str(locus_df["locus_id"].to_list())[1:-1])
-    cj_df = pd.read_sql_query(cj_query, connection)
-
     # List of all backsplice junctions related to given assembly
-    bj_query = 'select locus_id_id from core_backsplicejunction where locus_id_id in ({})'.format(
+    bj_query = 'select * from core_backsplicejunction where locus_id_id in ({})'.format(
         str(locus_df["locus_id"].to_list())[1:-1])
     bj_df = pd.read_sql_query(bj_query, connection)
 
@@ -159,7 +156,7 @@ def species_view_stats(request, species_id, assembly_id):
 
     # Number of circRNA producing genes
     count_circrna_producing_genes = len(
-        locus_df[locus_df.is_circrna_host == True])
+        locus_df[locus_df['is_circrna_host'] == True])
 
     # Graph for circRNA for each locus
     circRNA_per_locus_df = bj_df[['locus_id_id']].groupby(
@@ -169,9 +166,11 @@ def species_view_stats(request, species_id, assembly_id):
         "count": circRNA_per_locus_df["count"].to_list()
     }
 
-    # Graph for circRNA vs linear transcripts for each locus
-    cj_per_locus_df = cj_df[['locus_id_id']].groupby(
-        ['locus_id_id']).size().reset_index(name='count')
+    # Graph for circRNA vs linear transcripts for each
+    # List of all canonical junctions related to given assembly
+    cj_per_locus_query = 'select locus_id_id, count(*) as count from core_canonicaljunction where locus_id_id in ({}) group by locus_id_id'.format(
+        str(locus_df["locus_id"].to_list())[1:-1])
+    cj_per_locus_df = pd.read_sql_query(cj_per_locus_query, connection)
     locus_cj_df = pd.merge(locus_df[['locus_id', 'nexons']], cj_per_locus_df[['locus_id_id', 'count']],
                            left_on='locus_id', right_on='locus_id_id', how='outer').fillna(0, downcast='infer')
     locus_cj_bj_df = pd.merge(locus_cj_df, circRNA_per_locus_df[['locus_id_id', 'count']],
@@ -203,6 +202,14 @@ def species_view_stats(request, species_id, assembly_id):
         'tissue_list': source_list
     }
 
+    # List of distinct sequence regions among backsplice junctions
+    distinct_chromosomes = bj_df['seq_region_name'].unique().tolist()
+    distinct_chromosomes.sort(key=lambda x: (len(x), x))
+
+    # List of distinct classifications among backsplice junctions
+    distinct_classifications = bj_df['classification'].unique().tolist()
+    distinct_classifications.sort(key=lambda x: (len(x), x))
+
     data = {'species': species.scientific_name,
             'assembly': assembly.assembly_name,
             'count_total_samples': count_total_samples,
@@ -213,7 +220,10 @@ def species_view_stats(request, species_id, assembly_id):
             'count_circrna_producing_genes': count_circrna_producing_genes,
             'circRNA_per_locus': circRNA_per_locus,
             'circrna_vs_lt_per_locus': circrna_vs_lt_per_locus,
-            'tpm_tissue_boxplot': tpm_tissue_boxplot
+            'tpm_tissue_boxplot': tpm_tissue_boxplot,
+            'distinct_chromosomes': distinct_chromosomes,
+            'distinct_classifications': distinct_classifications,
+            'distinct_tissues': distinct_tissues
             }
 
     return Response(data=data, status=status.HTTP_200_OK)
@@ -346,3 +356,74 @@ def location_view_stats(request, species_id, assembly_id):
         return Response(data={'error': 'No assembly with the given id under the given species.'}, status=status.HTTP_404_NOT_FOUND)
 
     return Response(data={'species': [species.scientific_name, species.description], 'genome': assembly.assembly_genoverse_genome}, status=status.HTTP_200_OK)
+
+
+def export_species_view_list(request, species_id, assembly_id):
+    """
+    View to generate the export file in the species view
+    """
+    try:
+        species = Species.objects.get(taxon_id=species_id)
+    except:
+        raise Http404('No species with the given id.')
+
+    try:
+        assembly = species.assemblies.get(assembly_id=assembly_id)
+    except:
+        raise Http404('No assembly with the given id under the given species.')
+
+    # List of all locus for a given assembly
+    locus_query = 'select * from core_locus where assembly_id_id={};'.format(
+        assembly.assembly_id)
+    locus_df = pd.read_sql_query(locus_query, connection)
+
+    # List of all backsplice junctions related to given assembly
+    bj_query = 'select * from core_backsplicejunction where locus_id_id in ({})'.format(
+        str(locus_df["locus_id"].to_list())[1:-1])
+    bj_df = pd.read_sql_query(bj_query, connection)
+
+    sample_analysis_query = 'select source, analysis_id from core_sample inner join core_analysis on core_sample.sample_id=core_analysis.sample_id_id where species_id_id={} and assembly_id_id={}'.format(
+        species.taxon_id, assembly.assembly_id)
+    sample_analysis_df = pd.read_sql_query(sample_analysis_query, connection)
+
+    # Add tissues (source) column in the backsplice table
+    bj_df = pd.merge(bj_df, sample_analysis_df,
+                     left_on='analysis_id_id', right_on='analysis_id')
+
+    # Modifying columns
+    del bj_df['analysis_id']
+    del bj_df['analysis_id_id']
+    bj_df.rename(columns={'source': 'tissue'}, inplace=True)
+
+    # Get all the required get parameters
+    chromosomes = request.GET.getlist('chromosome[]', [])
+    classifications = request.GET.getlist('classification[]', [])
+    tissues = request.GET.getlist('tissue[]', [])
+    min_tpm = int(request.GET.get('tpm', 0))
+    min_n_methods = int(request.GET.get('nMethods', 0))
+    min_size = int(request.GET.get('size', 0))
+    req_format = request.GET.get('format', 'csv')
+
+    # Filtering according to the parameters
+    if chromosomes:
+        bj_df = bj_df[bj_df['seq_region_name'].isin(chromosomes)]
+    if classifications:
+        bj_df = bj_df[bj_df['classification'].isin(classifications)]
+    if tissues:
+        bj_df = bj_df[bj_df['tissue'].isin(tissues)]
+    bj_df = bj_df[(bj_df['tpm'] > min_tpm) & (
+        bj_df['genomic_size'] > min_size) & (bj_df['n_methods'] > min_n_methods)]
+
+    filename = 'ECIRCDB-'+str(species.scientific_name) + '-' + str(assembly.assembly_name) + \
+        '-' + str(assembly.assembly_accession) + \
+        '-' + str(datetime.datetime.now())
+
+    if req_format == 'fasta':
+        return HttpResponse('Work in progress!')
+
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename={}.csv'.format(
+        filename)
+
+    bj_df.to_csv(path_or_buf=response, sep=',', index=False)
+    return response
