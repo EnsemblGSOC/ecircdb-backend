@@ -272,7 +272,7 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
     cj_df = pd.read_sql_query(cj_query, connection)
 
     # List of all backsplice junctions related to given assembly
-    bj_query = 'select locus_id_id from core_backsplicejunction where locus_id_id in ({})'.format(
+    bj_query = 'select * from core_backsplicejunction where locus_id_id in ({})'.format(
         str(locus_df["locus_id"].to_list())[1:-1])
     bj_df = pd.read_sql_query(bj_query, connection)
 
@@ -328,11 +328,21 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
         'circrna_abundance_ratio': locus_df['circrna_abundance_ratio'].to_list()
     }
 
+    # List of distinct sequence regions among backsplice junctions
+    distinct_chromosomes = bj_df['seq_region_name'].unique().tolist()
+    distinct_chromosomes.sort(key=lambda x: (len(x), x))
+
+    # List of distinct classifications among backsplice junctions
+    distinct_classifications = bj_df['classification'].unique().tolist()
+    distinct_classifications.sort(key=lambda x: (len(x), x))
+
     data = {'species': species.scientific_name,
             'assembly': assembly.assembly_name,
             'sankey': sankey,
             'gene_vs_circrna_abundance_ratio': gene_vs_circrna_abundance_ratio,
-            'gene_level_bj_vs_cj': gene_level_bj_vs_cj
+            'gene_level_bj_vs_cj': gene_level_bj_vs_cj,
+            'distinct_chromosomes': distinct_chromosomes,
+            'distinct_classifications': distinct_classifications
             }
     return Response(data=data, status=status.HTTP_200_OK)
 
@@ -382,6 +392,7 @@ def export_species_view_list(request, species_id, assembly_id):
         str(locus_df["locus_id"].to_list())[1:-1])
     bj_df = pd.read_sql_query(bj_query, connection)
 
+    # List of analysis combined with source field from sample table for given assembly
     sample_analysis_query = 'select source, analysis_id from core_sample inner join core_analysis on core_sample.sample_id=core_analysis.sample_id_id where species_id_id={} and assembly_id_id={}'.format(
         species.taxon_id, assembly.assembly_id)
     sample_analysis_df = pd.read_sql_query(sample_analysis_query, connection)
@@ -417,6 +428,71 @@ def export_species_view_list(request, species_id, assembly_id):
     filename = 'ECIRCDB-'+str(species.scientific_name) + '-' + str(assembly.assembly_name) + \
         '-' + str(assembly.assembly_accession) + \
         '-' + str(datetime.datetime.now())
+
+    if req_format == 'fasta':
+        return HttpResponse('Work in progress!')
+
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename={}.csv'.format(
+        filename)
+
+    bj_df.to_csv(path_or_buf=response, sep=',', index=False)
+    return response
+
+
+def export_sample_view_list(request, species_id, assembly_id, sample_id):
+    """
+    View to generate the export file in the species view
+    """
+    try:
+        species = Species.objects.get(taxon_id=species_id)
+    except:
+        raise Http404('No species with the given id.')
+
+    try:
+        assembly = species.assemblies.get(assembly_id=assembly_id)
+    except:
+        raise Http404('No assembly with the given id under the given species.')
+
+    try:
+        sample = species.samples.get(sample_id=sample_id)
+    except:
+        return Http404('No sample with the given id under the given species.')
+
+    # List of the analysis related to the givem sample
+    analysis_query = 'select analysis_id from core_analysis where sample_id_id={}'.format(
+        sample.sample_id)
+    analysis_df = pd.read_sql_query(analysis_query, connection)
+
+    # List of all backsplice junctions related to the provided sample
+    bj_query = 'select * from core_backsplicejunction where analysis_id_id in ({})'.format(
+        str(analysis_df['analysis_id'].tolist())[1:-1])
+    bj_df = pd.read_sql_query(bj_query, connection)
+
+    # Add tissues (source) column in the backsplice table
+    bj_df['tissue'] = sample.source
+
+    # Modifying columns
+    del bj_df['analysis_id_id']
+
+    # Get all the required get parameters
+    chromosomes = request.GET.getlist('chromosome[]', [])
+    classifications = request.GET.getlist('classification[]', [])
+    min_tpm = int(request.GET.get('tpm', 0))
+    min_n_methods = int(request.GET.get('nMethods', 0))
+    min_size = int(request.GET.get('size', 0))
+    req_format = request.GET.get('format', 'csv')
+
+    # Filtering according to the parameters
+    if chromosomes:
+        bj_df = bj_df[bj_df['seq_region_name'].isin(chromosomes)]
+    if classifications:
+        bj_df = bj_df[bj_df['classification'].isin(classifications)]
+    bj_df = bj_df[(bj_df['tpm'] > min_tpm) & (
+        bj_df['genomic_size'] > min_size) & (bj_df['n_methods'] > min_n_methods)]
+
+    filename = 'ECIRCDB-'+str(species.scientific_name) + '-' + str(assembly.assembly_name) + '-' + str(
+        sample.accession) + '-' + str(assembly.assembly_accession) + '-' + str(datetime.datetime.now())
 
     if req_format == 'fasta':
         return HttpResponse('Work in progress!')

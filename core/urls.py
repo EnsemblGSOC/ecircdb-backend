@@ -16,7 +16,9 @@ urlpatterns = [
     path('location_view_stats/<int:species_id>/<int:assembly_id>/',
          views.location_view_stats),
     path('export_species_view_list/<int:species_id>/<int:assembly_id>/',
-         views.export_species_view_list)
+         views.export_species_view_list),
+    path('export_sample_view_list/<int:species_id>/<int:assembly_id>/<int:sample_id>/',
+         views.export_sample_view_list)
 ]
 
 # urlpatterns = format_suffix_patterns(urlpatterns)
