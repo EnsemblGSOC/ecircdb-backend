@@ -202,10 +202,6 @@ def species_view_stats(request, species_id, assembly_id):
         'tissue_list': source_list
     }
 
-    # List of distinct sequence regions among backsplice junctions
-    distinct_chromosomes = bj_df['seq_region_name'].unique().tolist()
-    distinct_chromosomes.sort(key=lambda x: (len(x), x))
-
     # List of distinct classifications among backsplice junctions
     distinct_classifications = bj_df['classification'].unique().tolist()
     distinct_classifications.sort(key=lambda x: (len(x), x))
@@ -221,7 +217,6 @@ def species_view_stats(request, species_id, assembly_id):
             'circRNA_per_locus': circRNA_per_locus,
             'circrna_vs_lt_per_locus': circrna_vs_lt_per_locus,
             'tpm_tissue_boxplot': tpm_tissue_boxplot,
-            'distinct_chromosomes': distinct_chromosomes,
             'distinct_classifications': distinct_classifications,
             'distinct_tissues': distinct_tissues
             }
@@ -328,10 +323,6 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
         'circrna_abundance_ratio': locus_df['circrna_abundance_ratio'].to_list()
     }
 
-    # List of distinct sequence regions among backsplice junctions
-    distinct_chromosomes = bj_df['seq_region_name'].unique().tolist()
-    distinct_chromosomes.sort(key=lambda x: (len(x), x))
-
     # List of distinct classifications among backsplice junctions
     distinct_classifications = bj_df['classification'].unique().tolist()
     distinct_classifications.sort(key=lambda x: (len(x), x))
@@ -341,7 +332,6 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
             'sankey': sankey,
             'gene_vs_circrna_abundance_ratio': gene_vs_circrna_abundance_ratio,
             'gene_level_bj_vs_cj': gene_level_bj_vs_cj,
-            'distinct_chromosomes': distinct_chromosomes,
             'distinct_classifications': distinct_classifications
             }
     return Response(data=data, status=status.HTTP_200_OK)
@@ -393,7 +383,7 @@ def export_species_view_list(request, species_id, assembly_id):
     bj_df = pd.read_sql_query(bj_query, connection)
 
     # List of analysis combined with source field from sample table for given assembly
-    sample_analysis_query = 'select source, analysis_id from core_sample inner join core_analysis on core_sample.sample_id=core_analysis.sample_id_id where species_id_id={} and assembly_id_id={}'.format(
+    sample_analysis_query = 'select sample_id, source, analysis_id from core_sample inner join core_analysis on core_sample.sample_id=core_analysis.sample_id_id where species_id_id={} and assembly_id_id={}'.format(
         species.taxon_id, assembly.assembly_id)
     sample_analysis_df = pd.read_sql_query(sample_analysis_query, connection)
 
@@ -405,14 +395,15 @@ def export_species_view_list(request, species_id, assembly_id):
     del bj_df['analysis_id']
     del bj_df['analysis_id_id']
     bj_df.rename(columns={'source': 'tissue'}, inplace=True)
+    bj_df = bj_df[['seq_region_name', 'seq_region_start', 'seq_region_end', 'coord_id', 'raw_count',
+                   'seq_region_strand', 'predicted_exons', 'sample_id', 'tissue', 'tpm', 'jpm', 'abundance_ratio', 'n_methods']]
 
     # Get all the required get parameters
     chromosomes = request.GET.getlist('chromosome[]', [])
     classifications = request.GET.getlist('classification[]', [])
     tissues = request.GET.getlist('tissue[]', [])
-    min_tpm = int(request.GET.get('tpm', 0))
-    min_n_methods = int(request.GET.get('nMethods', 0))
-    min_size = int(request.GET.get('size', 0))
+    min_tpm = float(request.GET.get('tpm', 0))
+    min_n_methods = float(request.GET.get('nMethods', 0))
     req_format = request.GET.get('format', 'csv')
 
     # Filtering according to the parameters
@@ -423,7 +414,10 @@ def export_species_view_list(request, species_id, assembly_id):
     if tissues:
         bj_df = bj_df[bj_df['tissue'].isin(tissues)]
     bj_df = bj_df[(bj_df['tpm'] > min_tpm) & (
-        bj_df['genomic_size'] > min_size) & (bj_df['n_methods'] > min_n_methods)]
+        bj_df['n_methods'] > min_n_methods)]
+
+    # Delete not required column
+    del bj_df['n_methods']
 
     filename = 'ECIRCDB-'+str(species.scientific_name) + '-' + str(assembly.assembly_name) + \
         '-' + str(assembly.assembly_accession) + \
@@ -471,16 +465,18 @@ def export_sample_view_list(request, species_id, assembly_id, sample_id):
 
     # Add tissues (source) column in the backsplice table
     bj_df['tissue'] = sample.source
+    bj_df['sample_id'] = sample.sample_id
 
     # Modifying columns
     del bj_df['analysis_id_id']
+    bj_df = bj_df[['seq_region_name', 'seq_region_start', 'seq_region_end', 'coord_id', 'raw_count',
+                   'seq_region_strand', 'predicted_exons', 'sample_id', 'tissue', 'tpm', 'jpm', 'abundance_ratio', 'n_methods']]
 
     # Get all the required get parameters
     chromosomes = request.GET.getlist('chromosome[]', [])
     classifications = request.GET.getlist('classification[]', [])
-    min_tpm = int(request.GET.get('tpm', 0))
-    min_n_methods = int(request.GET.get('nMethods', 0))
-    min_size = int(request.GET.get('size', 0))
+    min_tpm = float(request.GET.get('tpm', 0))
+    min_n_methods = float(request.GET.get('nMethods', 0))
     req_format = request.GET.get('format', 'csv')
 
     # Filtering according to the parameters
@@ -489,7 +485,10 @@ def export_sample_view_list(request, species_id, assembly_id, sample_id):
     if classifications:
         bj_df = bj_df[bj_df['classification'].isin(classifications)]
     bj_df = bj_df[(bj_df['tpm'] > min_tpm) & (
-        bj_df['genomic_size'] > min_size) & (bj_df['n_methods'] > min_n_methods)]
+        bj_df['n_methods'] > min_n_methods)]
+
+    # Delete not required column
+    del bj_df['n_methods']
 
     filename = 'ECIRCDB-'+str(species.scientific_name) + '-' + str(assembly.assembly_name) + '-' + str(
         sample.accession) + '-' + str(assembly.assembly_accession) + '-' + str(datetime.datetime.now())
