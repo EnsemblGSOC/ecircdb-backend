@@ -399,20 +399,21 @@ def export_species_view_list(request, species_id, assembly_id):
     bj_df = pd.merge(bj_df, sample_analysis_df,
                      left_on='analysis_id_id', right_on='analysis_id')
 
-    # Modifying columns
-    del bj_df['analysis_id']
-    del bj_df['analysis_id_id']
-    bj_df.rename(columns={'source': 'tissue'}, inplace=True)
-    bj_df = bj_df[['seq_region_name', 'seq_region_start', 'seq_region_end', 'coord_id', 'raw_count',
-                   'seq_region_strand', 'predicted_exons', 'sample_id', 'tissue', 'tpm', 'jpm', 'abundance_ratio', 'n_methods']]
-
     # Get all the required get parameters
     chromosomes = request.GET.getlist('chromosome[]', [])
     classifications = request.GET.getlist('classification[]', [])
     tissues = request.GET.getlist('tissue[]', [])
     min_tpm = float(request.GET.get('tpm', 0))
     min_n_methods = float(request.GET.get('nMethods', 3))
-    req_format = request.GET.get('format', 'csv')
+    req_format = 'bed' if request.GET.get('format', 'csv') == 'bed' else 'csv'
+    seperator = '\t' if req_format == 'bed' else ','
+
+    # Modifying columns
+    del bj_df['analysis_id']
+    del bj_df['analysis_id_id']
+    bj_df.rename(columns={'source': 'tissue'}, inplace=True)
+    bj_df = bj_df[['seq_region_name', 'seq_region_start', 'seq_region_end', 'coord_id', 'raw_count',
+                   'seq_region_strand', 'predicted_exons', 'sample_id', 'tissue', 'tpm', 'jpm', 'abundance_ratio', 'n_methods']]
 
     # Filtering according to the parameters
     if chromosomes:
@@ -424,21 +425,21 @@ def export_species_view_list(request, species_id, assembly_id):
     bj_df = bj_df[(bj_df['tpm'] >= min_tpm) & (
         bj_df['n_methods'] >= min_n_methods)]
 
-    # Delete not required column
+    # Delete not required column according to the required format
     del bj_df['n_methods']
+    if req_format == 'bed':
+        bj_df = bj_df[['seq_region_name', 'seq_region_start', 'seq_region_end', 'coord_id', 'raw_count',
+                       'seq_region_strand']]
 
     filename = 'ECIRCDB-'+str(species.scientific_name) + '-' + str(assembly.assembly_name) + \
         '-' + str(assembly.assembly_accession) + \
         '-' + str(datetime.datetime.now())
 
-    if req_format == 'fasta':
-        return HttpResponse('Work in progress!')
+    response = HttpResponse(content_type='text/{}'.format(req_format))
+    response['Content-Disposition'] = 'attachment; filename={}.{}'.format(
+        filename, req_format)
+    bj_df.to_csv(path_or_buf=response, sep=seperator, index=False)
 
-    response = HttpResponse(content_type='text/csv')
-    response['Content-Disposition'] = 'attachment; filename={}.csv'.format(
-        filename)
-
-    bj_df.to_csv(path_or_buf=response, sep=',', index=False)
     return response
 
 
@@ -475,23 +476,25 @@ def export_sample_view_list(request, species_id, assembly_id, sample_id):
     bj_df['tissue'] = sample.source
     bj_df['sample_id'] = sample.sample_id
 
+    # Get the parameters
+    req_format = 'bed' if request.GET.get('format', 'csv') == 'bed' else 'csv'
+    seperator = '\t' if req_format == 'bed' else ','
+
     # Modifying columns
     del bj_df['analysis_id_id']
-    bj_df = bj_df[['seq_region_name', 'seq_region_start', 'seq_region_end', 'coord_id', 'raw_count',
-                   'seq_region_strand', 'predicted_exons', 'sample_id', 'tissue', 'tpm', 'jpm', 'abundance_ratio']]
-
-    # Get the parameters
-    req_format = request.GET.get('format', 'csv')
+    if req_format == 'bed':
+        bj_df = bj_df[['seq_region_name', 'seq_region_start', 'seq_region_end', 'coord_id', 'raw_count',
+                       'seq_region_strand']]
+    else:
+        bj_df = bj_df[['seq_region_name', 'seq_region_start', 'seq_region_end', 'coord_id', 'raw_count',
+                       'seq_region_strand', 'predicted_exons', 'sample_id', 'tissue', 'tpm', 'jpm', 'abundance_ratio']]
 
     filename = 'ECIRCDB-'+str(species.scientific_name) + '-' + str(assembly.assembly_name) + '-' + str(
         sample.accession) + '-' + str(assembly.assembly_accession) + '-' + str(datetime.datetime.now())
 
-    if req_format == 'fasta':
-        return HttpResponse('Work in progress!')
+    response = HttpResponse(content_type='text/{}'.format(req_format))
+    response['Content-Disposition'] = 'attachment; filename={}.{}'.format(
+        filename, req_format)
+    bj_df.to_csv(path_or_buf=response, sep=seperator, index=False)
 
-    response = HttpResponse(content_type='text/csv')
-    response['Content-Disposition'] = 'attachment; filename={}.csv'.format(
-        filename)
-
-    bj_df.to_csv(path_or_buf=response, sep=',', index=False)
     return response
