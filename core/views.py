@@ -403,7 +403,7 @@ def export_species_view_list(request, species_id, assembly_id):
     classifications = request.GET.getlist('classification[]', [])
     tissues = request.GET.getlist('tissue[]', [])
     min_tpm = float(request.GET.get('tpm', 0))
-    min_n_methods = float(request.GET.get('nMethods', 0))
+    min_n_methods = float(request.GET.get('nMethods', 3))
     req_format = request.GET.get('format', 'csv')
 
     # Filtering according to the parameters
@@ -413,8 +413,8 @@ def export_species_view_list(request, species_id, assembly_id):
         bj_df = bj_df[bj_df['classification'].isin(classifications)]
     if tissues:
         bj_df = bj_df[bj_df['tissue'].isin(tissues)]
-    bj_df = bj_df[(bj_df['tpm'] > min_tpm) & (
-        bj_df['n_methods'] > min_n_methods)]
+    bj_df = bj_df[(bj_df['tpm'] >= min_tpm) & (
+        bj_df['n_methods'] >= min_n_methods)]
 
     # Delete not required column
     del bj_df['n_methods']
@@ -476,7 +476,7 @@ def export_sample_view_list(request, species_id, assembly_id, sample_id):
     chromosomes = request.GET.getlist('chromosome[]', [])
     classifications = request.GET.getlist('classification[]', [])
     min_tpm = float(request.GET.get('tpm', 0))
-    min_n_methods = float(request.GET.get('nMethods', 0))
+    min_n_methods = float(request.GET.get('nMethods', 3))
     req_format = request.GET.get('format', 'csv')
 
     # Filtering according to the parameters
@@ -484,8 +484,8 @@ def export_sample_view_list(request, species_id, assembly_id, sample_id):
         bj_df = bj_df[bj_df['seq_region_name'].isin(chromosomes)]
     if classifications:
         bj_df = bj_df[bj_df['classification'].isin(classifications)]
-    bj_df = bj_df[(bj_df['tpm'] > min_tpm) & (
-        bj_df['n_methods'] > min_n_methods)]
+    bj_df = bj_df[(bj_df['tpm'] >= min_tpm) & (
+        bj_df['n_methods'] >= min_n_methods)]
 
     # Delete not required column
     del bj_df['n_methods']
