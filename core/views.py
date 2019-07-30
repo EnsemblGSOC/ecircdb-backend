@@ -262,13 +262,13 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
     locus_df = pd.read_sql_query(locus_query, connection)
 
     # List of all canonical junctions related to given assembly
-    cj_query = 'select locus_id_id from core_canonicaljunction where locus_id_id in ({})'.format(
-        str(locus_df["locus_id"].to_list())[1:-1])
+    cj_query = 'select locus_id_id from core_canonicaljunction where analysis_id_id in ({})'.format(
+        str(analysis_df["analysis_id"].to_list())[1:-1])
     cj_df = pd.read_sql_query(cj_query, connection)
 
     # List of all backsplice junctions related to given assembly
-    bj_query = 'select * from core_backsplicejunction where locus_id_id in ({})'.format(
-        str(locus_df["locus_id"].to_list())[1:-1])
+    bj_query = 'select * from core_backsplicejunction where analysis_id_id in ({})'.format(
+        str(analysis_df["analysis_id"].to_list())[1:-1])
     bj_df = pd.read_sql_query(bj_query, connection)
 
     # Graph for circRNA vs linear transcripts for each locus
@@ -288,31 +288,44 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
         "text": "Locus " + locus_cj_bj_df['locus_id'].map(str) + "<br>Exons: " + locus_cj_bj_df['nexons'].map(str)
     }
 
-    # Sankey flow for the sample
-    library_size = str(int(sample.library_size or 0))
-    mapped_reads = str(int(sample.mapped_reads or 0))
-    total_spliced_reads = str(int(sample.total_spliced_reads or 0))
+    lib_size = int(sample.library_size or 0)
+    library_size = str(
+        round((int(sample.library_size or 0)/lib_size*100), 2))+'%'
+    mapped_reads = str(
+        round((int(sample.mapped_reads or 0)/lib_size*100), 2))+'%'
+    total_spliced_reads = str(
+        round(((int(sample.total_spliced_reads or 0) + int(sample.chimeric_reads or 0))/lib_size*100), 2))+'%'
     canonical_spliced_reads = str(
-        int(sample.total_spliced_reads or 0)-int(sample.backspliced_reads or 0))
-    backspliced_reads = str(int(sample.backspliced_reads or 0))
-    unmapped_reads = str(int(sample.library_size or 0) -
-                         int(sample.mapped_reads or 0))
+        round(((int(sample.total_spliced_reads or 0)-int(sample.backspliced_reads or 0))/lib_size*100), 2))+'%'
+    backspliced_reads = str(
+        round((int(sample.backspliced_reads or bj_df['junction_id'].size)/lib_size*100), 2))+'%'
+    unmapped_reads = str(round(((int(sample.library_size or 0) -
+                                 int(sample.mapped_reads or 0))/lib_size*100), 2))+'%'
+    chimeric_reads = str(
+        round((int(sample.chimeric_reads or 0)/lib_size*100), 2))+'%'
+    non_spliced_reads = str(round(((int(sample.mapped_reads or 0) -
+                                    int(sample.total_spliced_reads or 0))/lib_size*100), 2))+'%'
 
     sankey_labels = ['Library size ({})'.format(library_size),
-                     'Mapped reads ({})'.format(mapped_reads),
                      'Total spliced reads ({})'.format(total_spliced_reads),
                      'Canonical spliced reads ({})'.format(
                          canonical_spliced_reads),
                      'Backspliced reads ({})'.format(backspliced_reads),
-                     'Unmapped reads ({})'.format(unmapped_reads)
+                     'Unmapped reads ({})'.format(unmapped_reads),
+                     'Chimeric reads ({})'.format(chimeric_reads),
+                     'Non spliced reads ({})'.format(non_spliced_reads)
                      ]
 
-    sankey_values = [int(sample.mapped_reads or 0), int(sample.total_spliced_reads or 0),
+    sankey_values = [int(sample.total_spliced_reads or 0),
                      int(sample.total_spliced_reads or 0) -
                      int(sample.backspliced_reads or 0),
-                     int(sample.backspliced_reads or 0),
                      int(sample.library_size or 0) -
-                     int(sample.mapped_reads or 0)
+                     int(sample.mapped_reads or 0),
+                     int(sample.chimeric_reads or 0),
+                     int(
+                         sample.backspliced_reads or bj_df['junction_id'].size),
+                     int(sample.mapped_reads or 0) -
+                     int(sample.total_spliced_reads or 0)
                      ]
     sankey = {'sankey_labels': sankey_labels,
               'sankey_values': sankey_values}
@@ -323,16 +336,11 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
         'circrna_abundance_ratio': locus_df['circrna_abundance_ratio'].to_list()
     }
 
-    # List of distinct classifications among backsplice junctions
-    distinct_classifications = bj_df['classification'].unique().tolist()
-    distinct_classifications.sort(key=lambda x: (len(x), x))
-
     data = {'species': species.scientific_name,
             'assembly': assembly.assembly_name,
             'sankey': sankey,
             'gene_vs_circrna_abundance_ratio': gene_vs_circrna_abundance_ratio,
-            'gene_level_bj_vs_cj': gene_level_bj_vs_cj,
-            'distinct_classifications': distinct_classifications
+            'gene_level_bj_vs_cj': gene_level_bj_vs_cj
             }
     return Response(data=data, status=status.HTTP_200_OK)
 
@@ -470,25 +478,10 @@ def export_sample_view_list(request, species_id, assembly_id, sample_id):
     # Modifying columns
     del bj_df['analysis_id_id']
     bj_df = bj_df[['seq_region_name', 'seq_region_start', 'seq_region_end', 'coord_id', 'raw_count',
-                   'seq_region_strand', 'predicted_exons', 'sample_id', 'tissue', 'tpm', 'jpm', 'abundance_ratio', 'n_methods']]
+                   'seq_region_strand', 'predicted_exons', 'sample_id', 'tissue', 'tpm', 'jpm', 'abundance_ratio']]
 
-    # Get all the required get parameters
-    chromosomes = request.GET.getlist('chromosome[]', [])
-    classifications = request.GET.getlist('classification[]', [])
-    min_tpm = float(request.GET.get('tpm', 0))
-    min_n_methods = float(request.GET.get('nMethods', 3))
+    # Get the parameters
     req_format = request.GET.get('format', 'csv')
-
-    # Filtering according to the parameters
-    if chromosomes:
-        bj_df = bj_df[bj_df['seq_region_name'].isin(chromosomes)]
-    if classifications:
-        bj_df = bj_df[bj_df['classification'].isin(classifications)]
-    bj_df = bj_df[(bj_df['tpm'] >= min_tpm) & (
-        bj_df['n_methods'] >= min_n_methods)]
-
-    # Delete not required column
-    del bj_df['n_methods']
 
     filename = 'ECIRCDB-'+str(species.scientific_name) + '-' + str(assembly.assembly_name) + '-' + str(
         sample.accession) + '-' + str(assembly.assembly_accession) + '-' + str(datetime.datetime.now())
