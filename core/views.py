@@ -159,8 +159,8 @@ def species_view_stats(request, species_id, assembly_id):
         locus_df[locus_df['is_circrna_host'] == True])
 
     # Graph for circRNA for each locus
-    circRNA_per_locus_df = bj_df[['locus_id_id']].groupby(
-        ['locus_id_id']).size().reset_index(name='count')
+    circRNA_per_locus_df = bj_df[['locus_id_id', 'coord_id']].groupby(
+        ['locus_id_id'])['coord_id'].nunique().reset_index(name='count')
     circRNA_per_locus = {
         "locus_id": circRNA_per_locus_df["locus_id_id"].apply(str).to_list(),
         "count": circRNA_per_locus_df["count"].to_list()
@@ -188,11 +188,12 @@ def species_view_stats(request, species_id, assembly_id):
         assembly.assembly_id)
     sample_analysis_df = pd.read_sql_query(sample_analysis_query, connection)
     tpm_sample_analysis_df = pd.merge(
-        locusexpression_df[['tpm', 'analysis_id_id']], sample_analysis_df, left_on='analysis_id_id', right_on='analysis_id')
+        bj_df[['tpm', 'analysis_id_id']], sample_analysis_df, left_on='analysis_id_id', right_on='analysis_id')
     tpm_sample_merged_df = pd.merge(
         tpm_sample_analysis_df, sample_df, left_on='sample_id_id', right_on='sample_id')
     tpm_sample_merged_df.fillna(0)
-    tpm_sample_merged_df['tpm'] = np.log10(tpm_sample_merged_df['tpm']+1)
+    tpm_sample_merged_df['tpm'] = np.log10(
+        tpm_sample_merged_df['tpm']+1)
     tpm_sample_grouped_df = tpm_sample_merged_df.groupby(['source'])[
         'tpm'].apply(list)
     tpm_grouped_list = tpm_sample_grouped_df.to_dict()
@@ -336,11 +337,20 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
         'circrna_abundance_ratio': locus_df['circrna_abundance_ratio'].to_list()
     }
 
+    # Top X circRNAs sorted according to transcript_count
+    top_x_circrna_transcript_df = bj_df.groupby(['coord_id'])['transcript_count'].sum().reset_index(
+        name='total_transcript_count').sort_values('total_transcript_count', ascending=False)
+    top_x_circrna = {
+        'coord_id': top_x_circrna_transcript_df['coord_id'].tolist(),
+        'transcript_count': top_x_circrna_transcript_df['total_transcript_count'].tolist()
+    }
+
     data = {'species': species.scientific_name,
             'assembly': assembly.assembly_name,
             'sankey': sankey,
             'gene_vs_circrna_abundance_ratio': gene_vs_circrna_abundance_ratio,
-            'gene_level_bj_vs_cj': gene_level_bj_vs_cj
+            'gene_level_bj_vs_cj': gene_level_bj_vs_cj,
+            'top_x_circrna': top_x_circrna
             }
     return Response(data=data, status=status.HTTP_200_OK)
 
