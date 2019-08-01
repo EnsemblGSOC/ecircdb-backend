@@ -338,19 +338,16 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
     }
 
     # Top X circRNAs sorted according to transcript_count
-    top_x_circrna_transcript_df = bj_df.groupby(['coord_id'])['transcript_count'].sum().reset_index(
-        name='total_transcript_count').sort_values('total_transcript_count', ascending=False)
-    top_x_circrna = {
-        'coord_id': top_x_circrna_transcript_df['coord_id'].tolist(),
-        'transcript_count': top_x_circrna_transcript_df['total_transcript_count'].tolist()
-    }
+    top_x_structure_df = pd.merge(locus_df[['locus_id', 'stable_id', 'gene_name']], bj_df[[
+                                  'locus_id_id', 'tpm', 'jpm', 'abundance_ratio', 'coord_id']], left_on='locus_id', right_on='locus_id_id')
+    top_x_structure_data = top_x_structure_df.to_dict(orient='records')
 
     data = {'species': species.scientific_name,
             'assembly': assembly.assembly_name,
             'sankey': sankey,
             'gene_vs_circrna_abundance_ratio': gene_vs_circrna_abundance_ratio,
             'gene_level_bj_vs_cj': gene_level_bj_vs_cj,
-            'top_x_circrna': top_x_circrna
+            'top_x_structure_data': top_x_structure_data
             }
     return Response(data=data, status=status.HTTP_200_OK)
 
