@@ -11,19 +11,27 @@ class LocusExpression(models.Model):
     expression_id = models.AutoField(
         primary_key=True
     )
-    rpkm = models.IntegerField(
+    rpkm = models.DecimalField(
+        max_digits=19,
+        decimal_places=6,
         blank=True,
         null=True
     )
-    rpkm_external = models.IntegerField(
+    rpkm_external = models.DecimalField(
+        max_digits=19,
+        decimal_places=6,
         blank=True,
         null=True
     )
-    rpkm_internal = models.IntegerField(
+    rpkm_internal = models.DecimalField(
+        max_digits=19,
+        decimal_places=6,
         blank=True,
         null=True
     )
-    rpkm_ratio = models.IntegerField(
+    rpkm_ratio = models.DecimalField(
+        max_digits=19,
+        decimal_places=6,
         blank=True,
         null=True
     )
@@ -31,7 +39,9 @@ class LocusExpression(models.Model):
         blank=True,
         null=True
     )
-    tpm = models.IntegerField(
+    tpm = models.DecimalField(
+        max_digits=19,
+        decimal_places=6,
         blank=True,
         null=True
     )

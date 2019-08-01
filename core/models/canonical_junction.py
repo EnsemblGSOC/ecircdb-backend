@@ -42,7 +42,9 @@ class CanonicalJunction(models.Model):
         blank=True,
         null=True
     )
-    jpm = models.IntegerField(
+    jpm = models.DecimalField(
+        max_digits=19,
+        decimal_places=6,
         blank=True,
         null=True
     )

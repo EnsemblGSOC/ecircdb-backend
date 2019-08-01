@@ -42,7 +42,9 @@ class BackspliceJunction(models.Model):
         blank=True,
         null=True
     )
-    jpm = models.IntegerField(
+    jpm = models.DecimalField(
+        max_digits=19,
+        decimal_places=6,
         blank=True,
         null=True
     )
@@ -113,19 +115,27 @@ class BackspliceJunction(models.Model):
         blank=True,
         null=True
     )
-    tpm = models.IntegerField(
+    tpm = models.DecimalField(
+        max_digits=19,
+        decimal_places=6,
         blank=True,
         null=True
     )
-    transcript_count = models.IntegerField(
+    transcript_count = models.DecimalField(
+        max_digits=19,
+        decimal_places=6,
         blank=True,
         null=True
     )
-    gc_perc = models.IntegerField(
+    gc_perc = models.DecimalField(
+        max_digits=19,
+        decimal_places=6,
         blank=True,
         null=True
     )
-    abundance_ratio = models.IntegerField(
+    abundance_ratio = models.DecimalField(
+        max_digits=19,
+        decimal_places=6,
         blank=True,
         null=True
     )

@@ -16,7 +16,7 @@ class Locus(models.Model):
     )
     circrna_abundance_ratio = models.DecimalField(
         max_digits=19,
-        decimal_places=5,
+        decimal_places=6,
         blank=True,
         null=True
     )
