@@ -2,6 +2,7 @@ import datetime
 import django_filters
 import numpy as np
 import pandas as pd
+import requests
 
 from django.conf import settings
 from django.db import connection
@@ -140,7 +141,7 @@ def species_view_stats(request, species_id, assembly_id):
     count_distinct_tissues = len(distinct_tissues)
 
     # Total number of the circRNAs
-    total_circrnas = sample_df['circrna_count'].sum()
+    total_circrnas = bj_df['coord_id'].nunique()
 
     # Sum of the library size
     sum_library_size = sample_df['library_size'].sum()
@@ -194,6 +195,7 @@ def species_view_stats(request, species_id, assembly_id):
     tpm_sample_merged_df.fillna(0)
     tpm_sample_merged_df['tpm'] = np.log10(
         tpm_sample_merged_df['tpm']+1)
+    tpm_sample_merged_df = tpm_sample_merged_df.round(3)
     tpm_sample_grouped_df = tpm_sample_merged_df.groupby(['source'])[
         'tpm'].apply(list)
     tpm_grouped_list = tpm_sample_grouped_df.to_dict()
@@ -340,6 +342,7 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
     # Top X circRNAs sorted according to transcript_count
     top_x_structure_df = pd.merge(locus_df[['locus_id', 'stable_id', 'gene_name']], bj_df[[
                                   'locus_id_id', 'tpm', 'jpm', 'abundance_ratio', 'coord_id']], left_on='locus_id', right_on='locus_id_id')
+    top_x_structure_df = top_x_structure_df.round(3)
     top_x_structure_data = top_x_structure_df.to_dict(orient='records')
 
     data = {'species': species.scientific_name,
@@ -370,7 +373,24 @@ def location_view_stats(request, species_id, assembly_id):
     except:
         return Response(data={'error': 'No assembly with the given id under the given species.'}, status=status.HTTP_404_NOT_FOUND)
 
-    return Response(data={'species': [species.scientific_name, species.description], 'genome': assembly.assembly_genoverse_genome}, status=status.HTTP_200_OK)
+    # List of all locus for a given assembly
+    locus_query = 'select locus_id from core_locus where assembly_id_id={};'.format(
+        assembly.assembly_id)
+    locus_df = pd.read_sql_query(locus_query, connection)
+
+    # List of all backsplice junctions related to given assembly
+    bj_query = 'select seq_region_name, abundance_ratio from core_backsplicejunction where locus_id_id in ({})'.format(
+        str(locus_df["locus_id"].to_list())[1:-1])
+    bj_df = pd.read_sql_query(bj_query, connection)
+
+    chromosomes = bj_df[['seq_region_name', 'abundance_ratio']].groupby(
+        ['seq_region_name']).mean().nlargest(10, ['abundance_ratio']).index.tolist()
+
+    data = {
+        'chromosomes': chromosomes,
+    }
+
+    return Response(data=data, status=status.HTTP_200_OK)
 
 
 def export_species_view_list(request, species_id, assembly_id):
@@ -505,3 +525,47 @@ def export_sample_view_list(request, species_id, assembly_id, sample_id):
     bj_df.to_csv(path_or_buf=response, sep=seperator, index=False)
 
     return response
+
+
+@api_view(['GET'])
+@cache_page(caching_time)
+def get_genome(request, species_id, assembly_id):
+    """
+    View to get genome for the species
+    """
+
+    try:
+        species = Species.objects.get(taxon_id=species_id)
+    except:
+        return Response(data={'error': 'No species with the given id.'},
+                        status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        assembly = species.assemblies.get(assembly_id=assembly_id)
+    except:
+        return Response(data={'error': 'No assembly with the given id under the given species.'}, status=status.HTTP_404_NOT_FOUND)
+
+    genome = {}
+    scientific_name = species.scientific_name
+    scientific_name = scientific_name.lower().split(' ')
+    scientific_name = '_'.join(scientific_name)
+
+    url = 'https://rest.ensembl.org//info/assembly/{}?bands=1'.format(
+        scientific_name)
+    headers = {'Content-Type': 'application/json'}
+
+    r = requests.get(url, headers=headers)
+    for region in r.json()['top_level_region']:
+        genome.setdefault(region['name'],
+                          {'size': region['length'], 'bands': []})
+        if region['coord_system'] == 'chromosome':
+            if 'bands' in region:
+                for band in region['bands']:
+                    genome[band['seq_region_name']]['bands'].append({
+                        'id': band['id'],
+                        'start': band['start'],
+                        'end': band['end'],
+                        'type': band['stain']
+                    })
+
+    return Response(data=genome, status=status.HTTP_200_OK)
