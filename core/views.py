@@ -1,5 +1,6 @@
 import datetime
 import django_filters
+import json
 import numpy as np
 import pandas as pd
 import requests
@@ -569,3 +570,66 @@ def get_genome(request, species_id, assembly_id):
                     })
 
     return Response(data=genome, status=status.HTTP_200_OK)
+
+
+def circrna_track(request, species_id, assembly_id, position):
+    """
+    View to generate bed file to include circRNA tracks to the genoverse
+    """
+
+    try:
+        species = Species.objects.get(taxon_id=species_id)
+    except:
+        raise Http404('No species with the given id.')
+
+    try:
+        assembly = species.assemblies.get(assembly_id=assembly_id)
+    except:
+        raise Http404('No assembly with the given id under the given species.')
+
+    # Get location using url parameters
+    chromosome = position.split(':')[0]
+    start = position.split(':')[1].split('-')[0]
+    end = position.split(':')[1].split('-')[1]
+
+    # List of all locus for a given assembly
+    locus_query = 'select * from core_locus where assembly_id_id={};'.format(
+        assembly.assembly_id)
+    locus_df = pd.read_sql_query(locus_query, connection)
+
+    # List of all backsplice junctions related to given assembly
+    bj_query = 'select * from core_backsplicejunction where locus_id_id in ({}) and seq_region_name={} and seq_region_start>={} and seq_region_end<={}'.format(
+        str(locus_df["locus_id"].to_list())[1:-1], chromosome, start, end)
+    bj_df = pd.read_sql_query(bj_query, connection)
+
+    def convert_to_josn(x):
+        x = x.split('\t')
+        data = {
+            'seq_region_name': x[0],
+            'start': int(x[1]),
+            'end': int(x[2]),
+            'name': x[3],
+            'score': int(x[4]),
+            'strand': x[5],
+            'thickStart': int(x[6]),
+            'thickEnd': int(x[7]),
+            'itemRgb': x[8],
+            'blockCount': int(x[9]),
+            'blockSizes': x[10],
+            'blockStarts': x[11]
+        }
+        return data
+
+    browser_string_array = bj_df['browser_string'].unique()
+    browser_string_series = pd.Series(browser_string_array)
+    browser_string_json_series = browser_string_series.apply(
+        lambda x: convert_to_josn(x))
+    browser_string_json = browser_string_json_series.tolist()
+    # bed_data = browser_string_series.str.cat(sep='\n')
+
+    response = HttpResponse(json.dumps(browser_string_json),
+                            content_type='application/json')
+    # response = HttpResponse(bed_data, content_type='text/bed')
+    # browser_string_df.to_csv(path_or_buf=response, sep='\t', index=False)
+
+    return response
