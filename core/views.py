@@ -190,11 +190,13 @@ def species_view_stats(request, species_id, assembly_id):
         assembly.assembly_id)
     sample_analysis_df = pd.read_sql_query(sample_analysis_query, connection)
     tpm_sample_analysis_df = pd.merge(
-        bj_df[['tpm', 'analysis_id_id']], sample_analysis_df, left_on='analysis_id_id', right_on='analysis_id')
+        bj_df[['tpm', 'analysis_id_id', 'coord_id']], sample_analysis_df, left_on='analysis_id_id', right_on='analysis_id')
     tpm_sample_merged_df = pd.merge(
-        tpm_sample_analysis_df, sample_df, left_on='sample_id_id', right_on='sample_id')
+        tpm_sample_analysis_df, sample_df[['sample_id', 'source']], left_on='sample_id_id', right_on='sample_id')
     tpm_sample_merged_df.fillna(0)
-    tpm_sample_merged_df['tpm'] = np.log10(
+    tpm_sample_merged_df = tpm_sample_merged_df[['tpm', 'coord_id', 'source']].groupby(
+        ['source', 'coord_id']).mean().reset_index('coord_id').reset_index('source')[['source', 'tpm']]
+    tpm_sample_merged_df['tpm'] = np.log2(
         tpm_sample_merged_df['tpm']+1)
     tpm_sample_merged_df = tpm_sample_merged_df.round(3)
     tpm_sample_grouped_df = tpm_sample_merged_df.groupby(['source'])[
@@ -343,6 +345,7 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
     # Top X circRNAs sorted according to transcript_count
     top_x_structure_df = pd.merge(locus_df[['locus_id', 'stable_id', 'gene_name']], bj_df[[
                                   'locus_id_id', 'tpm', 'jpm', 'abundance_ratio', 'coord_id']], left_on='locus_id', right_on='locus_id_id')
+    top_x_structure_df[['abundance_ratio']] = top_x_structure_df[['abundance_ratio']]*100
     top_x_structure_df = top_x_structure_df.round(3)
     top_x_structure_data = top_x_structure_df.to_dict(orient='records')
 
