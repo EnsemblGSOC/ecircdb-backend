@@ -344,8 +344,9 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
 
     # Top X circRNAs sorted according to transcript_count
     top_x_structure_df = pd.merge(locus_df[['locus_id', 'stable_id', 'gene_name']], bj_df[[
-                                  'locus_id_id', 'tpm', 'jpm', 'abundance_ratio', 'coord_id']], left_on='locus_id', right_on='locus_id_id')
-    top_x_structure_df[['abundance_ratio']] = top_x_structure_df[['abundance_ratio']]*100
+                                  'locus_id_id', 'tpm', 'jpm', 'abundance_ratio', 'coord_id', 'gc_perc', 'raw_count', 'n_methods']], left_on='locus_id', right_on='locus_id_id')
+    top_x_structure_df[['abundance_ratio']
+                       ] = top_x_structure_df[['abundance_ratio']]*100
     top_x_structure_df = top_x_structure_df.round(3)
     top_x_structure_data = top_x_structure_df.to_dict(orient='records')
 
@@ -632,7 +633,5 @@ def circrna_track(request, species_id, assembly_id, position):
 
     response = HttpResponse(json.dumps(browser_string_json),
                             content_type='application/json')
-    # response = HttpResponse(bed_data, content_type='text/bed')
-    # browser_string_df.to_csv(path_or_buf=response, sep='\t', index=False)
 
     return response
