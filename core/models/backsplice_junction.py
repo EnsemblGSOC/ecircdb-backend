@@ -42,9 +42,7 @@ class BackspliceJunction(models.Model):
         blank=True,
         null=True
     )
-    jpm = models.DecimalField(
-        max_digits=19,
-        decimal_places=6,
+    jpm = models.IntegerField(
         blank=True,
         null=True
     )
@@ -127,13 +125,11 @@ class BackspliceJunction(models.Model):
         blank=True,
         null=True
     )
-    gc_perc = models.DecimalField(
-        max_digits=19,
-        decimal_places=6,
+    gc_perc = models.IntegerField(
         blank=True,
         null=True
     )
-    abundance_ratio = models.DecimalField(
+    abundance_ratio = models.DeciamlField(
         max_digits=19,
         decimal_places=6,
         blank=True,

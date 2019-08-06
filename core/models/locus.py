@@ -14,9 +14,7 @@ class Locus(models.Model):
     browser_string = models.TextField(
         blank=True
     )
-    circrna_abundance_ratio = models.DecimalField(
-        max_digits=19,
-        decimal_places=6,
+    circrna_abundance_ratio = models.IntegerField(
         blank=True,
         null=True
     )
