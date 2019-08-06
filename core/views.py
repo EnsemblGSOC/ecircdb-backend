@@ -12,6 +12,7 @@ from django.views.decorators.cache import cache_page
 from rest_framework import filters, generics, permissions, status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+from sklearn.preprocessing import StandardScaler
 
 from core.models import Species, Assembly, Analysis, BackspliceJunction, Sample
 from core.serializers import SpeciesDetailSerializer, SpeciesListSerializer, SampleListSerializer, SampleDetailsSerializer
@@ -185,26 +186,115 @@ def species_view_stats(request, species_id, assembly_id):
         "text": "Locus " + locus_cj_bj_df['locus_id'].map(str) + "<br>Exons: " + locus_cj_bj_df['nexons'].map(str)
     }
 
-    # Graph for tissue TPM box plot
+    # Pie chart for circRNA classification
+    values = bj_df[['classification', 'coord_id']].groupby(
+        ['classification'])['coord_id'].nunique().tolist()
+    labels = bj_df[['classification', 'coord_id']].groupby(
+        ['classification'])['coord_id'].nunique().keys().tolist()
+    circrna_classification = {
+        'values': values,
+        'labels': labels
+    }
+
+    # Pie chart/Treemap for circRNA n_methods
+    n_methods_count_df = bj_df[['n_methods', 'coord_id']].groupby(
+        ['n_methods'])['coord_id'].nunique().reset_index(name='count')
+    count_n_methods_gt_3 = n_methods_count_df.loc[n_methods_count_df.n_methods > 3]['count'].sum(
+    )
+    n_methods_count_df = n_methods_count_df[n_methods_count_df.n_methods <= 3]
+    n_methods_count_df = n_methods_count_df.append(
+        {'n_methods': '>3', 'count': count_n_methods_gt_3}, ignore_index=True)
+    values = n_methods_count_df['count'].tolist()
+    labels = n_methods_count_df['n_methods'].tolist()
+    circrna_n_methods = {
+        'values': values,
+        'labels': labels
+    }
+
+    # Histogram for circRNA n_exons count frequency
+    circrna_n_exons = locus_df[['coord_id', 'nexons']].drop_duplicates()[
+        'nexons'].tolist()
+
+    # Bar plot for circRNAs per chromosomes
+    circrna_chromosomes = bj_df[['coord_id', 'seq_region_name']].groupby(['seq_region_name'])[
+        'coord_id'].nunique().reset_index(name='circrnas').sort_values('circrnas', ascending=False).head(30)
+    chromosomes_circrna_count = {
+        'chromosomes': circrna_chromosomes['seq_region_name'].tolist(),
+        'circrnas': circrna_chromosomes['circrnas'].tolist()
+    }
+
+    # DF, grouped by tissue for distinct circRNAs aggregating corresponding fields
     sample_analysis_query = 'select analysis_id, sample_id_id from core_analysis where assembly_id_id={};'.format(
         assembly.assembly_id)
     sample_analysis_df = pd.read_sql_query(sample_analysis_query, connection)
-    tpm_sample_analysis_df = pd.merge(
-        bj_df[['tpm', 'analysis_id_id', 'coord_id']], sample_analysis_df, left_on='analysis_id_id', right_on='analysis_id')
-    tpm_sample_merged_df = pd.merge(
-        tpm_sample_analysis_df, sample_df[['sample_id', 'source']], left_on='sample_id_id', right_on='sample_id')
-    tpm_sample_merged_df.fillna(0)
-    tpm_sample_merged_df = tpm_sample_merged_df[['tpm', 'coord_id', 'source']].groupby(
-        ['source', 'coord_id']).mean().reset_index('coord_id').reset_index('source')[['source', 'tpm']]
+    bj_sample_analysis_df = pd.merge(
+        bj_df[['tpm', 'jpm', 'abundance_ratio', 'genomic_size', 'spliced_size', 'analysis_id_id', 'coord_id']], sample_analysis_df, left_on='analysis_id_id', right_on='analysis_id')
+    bj_sample_merged_df = pd.merge(
+        bj_sample_analysis_df, sample_df[['sample_id', 'source']], left_on='sample_id_id', right_on='sample_id')
+    bj_sample_merged_df.fillna(0)
+    bj_sample_merged_df = bj_sample_merged_df[['tpm', 'jpm', 'abundance_ratio', 'genomic_size', 'spliced_size', 'coord_id', 'source']].groupby(
+        ['source', 'coord_id']).mean().reset_index('coord_id').reset_index('source')[['source', 'tpm', 'jpm', 'abundance_ratio', 'genomic_size', 'spliced_size']]
+    source_list = bj_sample_merged_df[['source']].groupby(
+        ['source']).apply(list).keys().to_list()
+
+    # Graph for tissue circRNA size violin plot
+    circrna_size_sample_merged_df = bj_sample_merged_df[[
+        'spliced_size', 'genomic_size', 'source']]
+    circrna_size_sample_merged_df['spliced_size'] = np.log2(
+        circrna_size_sample_merged_df[['spliced_size']] + 1)
+    circrna_size_sample_merged_df['genomic_size'] = np.log2(
+        circrna_size_sample_merged_df[['genomic_size']] + 1)
+    circrna_size_sample_merged_df = circrna_size_sample_merged_df.round(3)
+    tissues_list = circrna_size_sample_merged_df['source'].tolist()
+    spliced_sizes = circrna_size_sample_merged_df['spliced_size'].tolist()
+    genomic_sizes = circrna_size_sample_merged_df['genomic_size'].tolist()
+    size_tissue_boxplot = {
+        'spliced_sizes': spliced_sizes,
+        'genomic_sizes': genomic_sizes,
+        'tissue_list': tissues_list
+    }
+
+    # Graph for tissue TPM box plot
+    tpm_sample_merged_df = bj_sample_merged_df[['source', 'tpm']]
     tpm_sample_merged_df['tpm'] = np.log2(
-        tpm_sample_merged_df['tpm']+1)
+        tpm_sample_merged_df[['tpm']]+1)
     tpm_sample_merged_df = tpm_sample_merged_df.round(3)
     tpm_sample_grouped_df = tpm_sample_merged_df.groupby(['source'])[
         'tpm'].apply(list)
     tpm_grouped_list = tpm_sample_grouped_df.to_dict()
-    source_list = tpm_sample_grouped_df.keys().to_list()
     tpm_tissue_boxplot = {
         'tpm_grouped': tpm_grouped_list,
+        'tissue_list': source_list
+    }
+
+    # Graph for tissue JPM box plot
+    jpm_sample_merged_df = bj_sample_merged_df[['source', 'jpm']]
+    jpm_sample_merged_df['jpm'] = np.log2(jpm_sample_merged_df['jpm']+1)
+    jpm_sample_grouped_df = jpm_sample_merged_df.groupby(['source'])[
+        'jpm'].apply(pd.DataFrame).fillna(0)
+    data = jpm_sample_grouped_df.values
+    scaler = StandardScaler()
+    scaler.fit(data)
+    data = scaler.transform(data)
+    scaled_data_df = pd.DataFrame(data, columns=source_list).fillna(0)
+    jpm_grouped_list = {}
+    for tissue in source_list:
+        jpm_grouped_list[tissue] = scaled_data_df[tissue]
+    jpm_tissue_boxplot = {
+        'jpm_grouped': jpm_grouped_list,
+        'tissue_list': source_list
+    }
+
+    # Graph for tissue AR box plot
+    ar_sample_merged_df = bj_sample_merged_df[['source', 'abundance_ratio']]
+    ar_sample_merged_df['abundance_ratio'] = np.log2(
+        ar_sample_merged_df['abundance_ratio']+1)
+    ar_sample_merged_df = ar_sample_merged_df.round(3)
+    ar_sample_grouped_df = ar_sample_merged_df.groupby(['source'])[
+        'abundance_ratio'].apply(list)
+    ar_grouped_list = ar_sample_grouped_df.to_dict()
+    ar_tissue_boxplot = {
+        'ar_grouped': ar_grouped_list,
         'tissue_list': source_list
     }
 
@@ -222,7 +312,14 @@ def species_view_stats(request, species_id, assembly_id):
             'count_circrna_producing_genes': count_circrna_producing_genes,
             'circRNA_per_locus': circRNA_per_locus,
             'circrna_vs_lt_per_locus': circrna_vs_lt_per_locus,
+            'circrna_classification': circrna_classification,
+            'circrna_n_methods': circrna_n_methods,
+            'circrna_n_exons': circrna_n_exons,
             'tpm_tissue_boxplot': tpm_tissue_boxplot,
+            'jpm_tissue_boxplot': jpm_tissue_boxplot,
+            'ar_tissue_boxplot': ar_tissue_boxplot,
+            'size_tissue_boxplot': size_tissue_boxplot,
+            'chromosomes_circrna_count': chromosomes_circrna_count,
             'distinct_classifications': distinct_classifications,
             'distinct_tissues': distinct_tissues
             }
