@@ -240,9 +240,9 @@ def species_view_stats(request, species_id, assembly_id):
     # Graph for tissue circRNA size violin plot
     circrna_size_sample_merged_df = bj_sample_merged_df[[
         'spliced_size', 'genomic_size', 'source']]
-    circrna_size_sample_merged_df['spliced_size'] = np.log2(
+    circrna_size_sample_merged_df.loc[:, 'spliced_size'] = np.log2(
         circrna_size_sample_merged_df[['spliced_size']] + 1)
-    circrna_size_sample_merged_df['genomic_size'] = np.log2(
+    circrna_size_sample_merged_df.loc[:, 'genomic_size'] = np.log2(
         circrna_size_sample_merged_df[['genomic_size']] + 1)
     circrna_size_sample_merged_df = circrna_size_sample_merged_df.round(3)
     tissues_list = circrna_size_sample_merged_df['source'].tolist()
@@ -256,7 +256,7 @@ def species_view_stats(request, species_id, assembly_id):
 
     # Graph for tissue TPM box plot
     tpm_sample_merged_df = bj_sample_merged_df[['source', 'tpm']]
-    tpm_sample_merged_df['tpm'] = np.log2(
+    tpm_sample_merged_df.loc[:, 'tpm'] = np.log2(
         tpm_sample_merged_df[['tpm']]+1)
     tpm_sample_merged_df = tpm_sample_merged_df.round(3)
     tpm_sample_grouped_df = tpm_sample_merged_df.groupby(['source'])[
@@ -269,7 +269,7 @@ def species_view_stats(request, species_id, assembly_id):
 
     # Graph for tissue JPM box plot
     jpm_sample_merged_df = bj_sample_merged_df[['source', 'jpm']]
-    jpm_sample_merged_df['jpm'] = np.log2(jpm_sample_merged_df['jpm']+1)
+    jpm_sample_merged_df.loc[:, 'jpm'] = np.log2(jpm_sample_merged_df['jpm']+1)
     jpm_sample_grouped_df = jpm_sample_merged_df.groupby(['source'])[
         'jpm'].apply(pd.DataFrame).fillna(0)
     data = jpm_sample_grouped_df.values
@@ -287,8 +287,9 @@ def species_view_stats(request, species_id, assembly_id):
 
     # Graph for tissue AR box plot
     ar_sample_merged_df = bj_sample_merged_df[['source', 'abundance_ratio']]
-    ar_sample_merged_df['abundance_ratio'] = np.log2(
-        ar_sample_merged_df['abundance_ratio']+1)
+    ar_sample_merged_df = ar_sample_merged_df[ar_sample_merged_df['abundance_ratio'] != 0]
+    ar_sample_merged_df.loc[:, 'abundance_ratio'] = np.log2(
+        ar_sample_merged_df['abundance_ratio'])
     ar_sample_merged_df = ar_sample_merged_df.round(3)
     ar_sample_grouped_df = ar_sample_merged_df.groupby(['source'])[
         'abundance_ratio'].apply(list)
