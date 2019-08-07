@@ -212,8 +212,24 @@ def species_view_stats(request, species_id, assembly_id):
     }
 
     # Histogram for circRNA n_exons count frequency
-    circrna_n_exons = locus_df[['coord_id', 'nexons']].drop_duplicates()[
-        'nexons'].tolist()
+    circrna_n_exons_df = bj_df[['coord_id',
+                                'predicted_exons']].drop_duplicates()
+    circrna_n_exons_df.loc[:, 'count_predicted_exons'] = circrna_n_exons_df['predicted_exons'].apply(
+        lambda x: len(x.split(',')))
+    circrna_n_exons_series = circrna_n_exons_df[['count_predicted_exons']].groupby(
+        ['count_predicted_exons']).size()
+    circrna_n_exons_df = pd.DataFrame(
+        {'nexons': circrna_n_exons_series.index, 'counts': circrna_n_exons_series.values})
+    circrna_n_exons_gte_30 = circrna_n_exons_df.loc[circrna_n_exons_df.nexons > 30].counts.sum(
+    )
+    circrna_n_exons_df = circrna_n_exons_df.drop(
+        circrna_n_exons_df[circrna_n_exons_df.nexons > 30].index)
+    circrna_n_exons_df = circrna_n_exons_df.append(
+        {'counts': circrna_n_exons_gte_30, 'nexons': '30+'}, ignore_index=True)
+    circrna_n_exons = {
+        'x': ['NExons-'+str(x) for x in circrna_n_exons_df['nexons'].tolist()],
+        'y': circrna_n_exons_df['counts'].tolist()
+    }
 
     # Bar plot for circRNAs per chromosomes
     circrna_chromosomes = bj_df[['coord_id', 'seq_region_name']].groupby(['seq_region_name'])[
