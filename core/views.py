@@ -295,7 +295,7 @@ def species_view_stats(request, species_id, assembly_id):
     scaled_data_df = pd.DataFrame(data, columns=source_list).fillna(0)
     jpm_grouped_list = {}
     for tissue in source_list:
-        jpm_grouped_list[tissue] = scaled_data_df[tissue]
+        jpm_grouped_list[tissue] = scaled_data_df[tissue].tolist()
     jpm_tissue_boxplot = {
         'jpm_grouped': jpm_grouped_list,
         'tissue_list': source_list
@@ -382,7 +382,7 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
     locus_df = pd.read_sql_query(locus_query, connection)
 
     # List of all canonical junctions related to given assembly
-    cj_query = 'select locus_id_id from core_canonicaljunction where analysis_id_id in ({})'.format(
+    cj_query = 'select * from core_canonicaljunction where analysis_id_id in ({})'.format(
         str(analysis_df["analysis_id"].to_list())[1:-1])
     cj_df = pd.read_sql_query(cj_query, connection)
 
@@ -450,6 +450,16 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
     sankey = {'sankey_labels': sankey_labels,
               'sankey_values': sankey_values}
 
+    # JPM boxplot for circRNAs and canonical junction
+    bj_jpm_list = np.log2(bj_df[['coord_id', 'jpm']].groupby(
+        'coord_id').mean().reset_index()['jpm'].tolist())
+    cj_jpm_list = np.log2(cj_df[['coord_id', 'jpm']].groupby(
+        'coord_id').mean().reset_index()['jpm'].tolist())
+    jpm_boxplot = {
+        'bj_jpm_list': bj_jpm_list,
+        'cj_jpm_list': cj_jpm_list
+    }
+
     # Graph for gene vs circrna_abundance_ratio
     gene_vs_circrna_abundance_ratio = {
         'genes': locus_df['gene_name'].to_list(),
@@ -467,6 +477,7 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
     data = {'species': species.scientific_name,
             'assembly': assembly.assembly_name,
             'sankey': sankey,
+            'jpm_boxplot': jpm_boxplot,
             'gene_vs_circrna_abundance_ratio': gene_vs_circrna_abundance_ratio,
             'gene_level_bj_vs_cj': gene_level_bj_vs_cj,
             'top_x_structure_data': top_x_structure_data
