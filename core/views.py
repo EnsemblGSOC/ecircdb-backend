@@ -372,11 +372,18 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
         sample.sample_id)
     analysis_df = pd.read_sql_query(analysis_query, connection)
 
+    # List of all the genes of the given assembly
+    gene_query = 'select * from core_ensemblgene where assembly_id_id={}'.format(
+        assembly.assembly_id
+    )
+    gene_df = pd.read_sql_query(gene_query, connection)
+
     # List of all locus expressions related to the given sample
     locusexpression_query = 'select * from core_locusexpression where analysis_id_id in ({})'.format(
         str(analysis_df['analysis_id'].to_list())[1:-1])
     locusexpression_df = pd.read_sql_query(locusexpression_query, connection)
 
+    # List of all locus related to the given sample
     locus_query = 'select * from core_locus where locus_id in ({})'.format(
         str(locusexpression_df['locus_id_id'].to_list())[1:-1])
     locus_df = pd.read_sql_query(locus_query, connection)
@@ -476,15 +483,17 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
     # Top X gene level abundance
     locusexpression_max_tpm = locusexpression_df[['locus_id_id', 'tpm']].groupby(
         'locus_id_id').max().reset_index()
-    locus_tpm = locus_df[['gene_name', 'locus_id', 'stable_id', 'circrna_abundance_ratio']].merge(
+    locus_tpm = locus_df[['gene_name', 'locus_id', 'stable_id']].merge(
         locusexpression_max_tpm, left_on='locus_id', right_on='locus_id_id')
-    bj_circrna_count_df = bj_df[['locus_id_id', 'coord_id']].groupby(
-        'locus_id_id').coord_id.nunique().reset_index()
+    bj_circrna_count_df = bj_df[['locus_id_id', 'coord_id', 'abundance_ratio']].groupby(
+        'locus_id_id').agg({'coord_id': pd.Series.nunique, 'abundance_ratio': 'sum'}).reset_index()
     top_x_gene_level_abundance_df = locus_tpm.merge(bj_circrna_count_df, left_on='locus_id', right_on='locus_id_id', how='outer').fillna(
-        0)[['gene_name', 'circrna_abundance_ratio', 'tpm', 'coord_id']].groupby('gene_name').agg({'circrna_abundance_ratio': 'sum', 'tpm': 'max', 'coord_id': 'sum'}).reset_index()
+        0)[['gene_name', 'abundance_ratio', 'tpm', 'coord_id']].groupby('gene_name').agg({'abundance_ratio': 'sum', 'tpm': 'max', 'coord_id': 'sum'}).reset_index()
     top_x_gene_level_abundance_df[[
-        'circrna_abundance_ratio']] = top_x_gene_level_abundance_df[['circrna_abundance_ratio']]*100
+        'abundance_ratio']] = top_x_gene_level_abundance_df[['abundance_ratio']]*100
     top_x_gene_level_abundance_df = top_x_gene_level_abundance_df.round(3)
+    top_x_gene_level_abundance_df = top_x_gene_level_abundance_df.merge(
+        gene_df[['gene_name', 'stable_id', 'biotype', 'description']], left_on='gene_name', right_on='stable_id', suffixes=('_locus', ''))
     top_x_gene_level_abundance = top_x_gene_level_abundance_df.to_dict(
         orient='records')
 
