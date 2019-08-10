@@ -161,29 +161,29 @@ def species_view_stats(request, species_id, assembly_id):
     count_circrna_producing_genes = len(
         locus_df[locus_df['is_circrna_host'] == True])
 
+    # Histogram for number of genes per number of circRNAs
+    locus_bj_merged_circRNA_count_df = locus_df[['locus_id']].merge(bj_df[['locus_id_id', 'coord_id']], left_on='locus_id', right_on='locus_id_id')[
+        ['locus_id', 'coord_id']].groupby('locus_id').agg({'coord_id': pd.Series.nunique}).reset_index()
+    gene_count_per_circrna_count_df = locus_bj_merged_circRNA_count_df.groupby(
+        'coord_id').agg({'locus_id': pd.Series.nunique}).reset_index()
+    gene_count_gte_30 = gene_count_per_circrna_count_df.loc[gene_count_per_circrna_count_df.coord_id > 30].locus_id.sum(
+    )
+    gene_count_per_circrna_count_df = gene_count_per_circrna_count_df.drop(
+        gene_count_per_circrna_count_df[gene_count_per_circrna_count_df.coord_id > 30].index)
+    gene_count_per_circrna_count_df = gene_count_per_circrna_count_df.append(
+        {'locus_id': gene_count_gte_30, 'coord_id': '30+'}, ignore_index=True)
+    gene_count_per_circrna_count = {
+        'circrna_count': [str(x)+' circRNAs' for x in gene_count_per_circrna_count_df['coord_id'].tolist()],
+        'labels': [str(x) for x in gene_count_per_circrna_count_df['coord_id'].tolist()],
+        'genes_frequency': gene_count_per_circrna_count_df['locus_id'].tolist()
+    }
+
     # Graph for circRNA for each locus
     circRNA_per_locus_df = bj_df[['locus_id_id', 'coord_id']].groupby(
         ['locus_id_id'])['coord_id'].nunique().reset_index(name='count')
     circRNA_per_locus = {
         "locus_id": circRNA_per_locus_df["locus_id_id"].apply(str).to_list(),
         "count": circRNA_per_locus_df["count"].to_list()
-    }
-
-    # Graph for circRNA vs linear transcripts for each
-    # List of all canonical junctions related to given assembly
-    cj_per_locus_query = 'select locus_id_id, count(*) as count from core_canonicaljunction where locus_id_id in ({}) group by locus_id_id'.format(
-        str(locus_df["locus_id"].to_list())[1:-1])
-    cj_per_locus_df = pd.read_sql_query(cj_per_locus_query, connection)
-    locus_cj_df = pd.merge(locus_df[['locus_id', 'nexons']], cj_per_locus_df[['locus_id_id', 'count']],
-                           left_on='locus_id', right_on='locus_id_id', how='outer').fillna(0, downcast='infer')
-    locus_cj_bj_df = pd.merge(locus_cj_df, circRNA_per_locus_df[['locus_id_id', 'count']],
-                              left_on='locus_id', right_on='locus_id_id', how='outer', suffixes=('_cj', '_bj')).fillna(0, downcast='infer')
-    circrna_vs_lt_per_locus = {
-        "locus_id": locus_cj_bj_df["locus_id"].to_list(),
-        "count_cj": locus_cj_bj_df["count_cj"].to_list(),
-        "count_bj": locus_cj_bj_df["count_bj"].to_list(),
-        "nexons": locus_cj_bj_df["nexons"].to_list(),
-        "text": "Locus " + locus_cj_bj_df['locus_id'].map(str) + "<br>Exons: " + locus_cj_bj_df['nexons'].map(str)
     }
 
     # Pie chart for circRNA classification
@@ -228,6 +228,7 @@ def species_view_stats(request, species_id, assembly_id):
         {'counts': circrna_n_exons_gte_30, 'nexons': '30+'}, ignore_index=True)
     circrna_n_exons = {
         'x': ['NExons-'+str(x) for x in circrna_n_exons_df['nexons'].tolist()],
+        'labels': [str(x) for x in circrna_n_exons_df['nexons'].tolist()],
         'y': circrna_n_exons_df['counts'].tolist()
     }
 
@@ -247,7 +248,7 @@ def species_view_stats(request, species_id, assembly_id):
         bj_df[['tpm', 'jpm', 'abundance_ratio', 'genomic_size', 'spliced_size', 'analysis_id_id', 'coord_id']], sample_analysis_df, left_on='analysis_id_id', right_on='analysis_id')
     bj_sample_merged_df = pd.merge(
         bj_sample_analysis_df, sample_df[['sample_id', 'source']], left_on='sample_id_id', right_on='sample_id')
-    bj_sample_merged_df.fillna(0)
+    bj_sample_merged_df = bj_sample_merged_df.fillna(0)
     bj_sample_merged_df = bj_sample_merged_df[['tpm', 'jpm', 'abundance_ratio', 'genomic_size', 'spliced_size', 'coord_id', 'source']].groupby(
         ['source', 'coord_id']).mean().reset_index('coord_id').reset_index('source')[['source', 'tpm', 'jpm', 'abundance_ratio', 'genomic_size', 'spliced_size']]
     source_list = bj_sample_merged_df[['source']].groupby(
@@ -328,7 +329,7 @@ def species_view_stats(request, species_id, assembly_id):
             'circrna_per_sample': circrna_per_sample,
             'count_circrna_producing_genes': count_circrna_producing_genes,
             'circRNA_per_locus': circRNA_per_locus,
-            'circrna_vs_lt_per_locus': circrna_vs_lt_per_locus,
+            'gene_count_per_circrna_count': gene_count_per_circrna_count,
             'circrna_classification': circrna_classification,
             'circrna_n_methods': circrna_n_methods,
             'circrna_n_exons': circrna_n_exons,
@@ -466,10 +467,16 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
         "text": "Gene " + locus_cj_bj_jpm_df['gene_name'].map(str)
     }
 
-    # Graph for gene vs circrna_abundance_ratio
-    gene_vs_circrna_abundance_ratio = {
-        'genes': locus_df['gene_name'].to_list(),
-        'circrna_abundance_ratio': locus_df['circrna_abundance_ratio'].to_list()
+    # Boxplot for TPM grouped by is_circrna_host
+    locus_bj_df = locus_df[['locus_id']].merge(bj_df[['locus_id_id', 'coord_id']], left_on='locus_id', right_on='locus_id_id').groupby(
+        'locus_id_id').agg({'coord_id': pd.Series.nunique}).reset_index()
+    locus_bj_df = locus_bj_df.groupby('locus_id_id').sum().reset_index()
+    locus_bj_df['circRNA_host'] = True
+    locus_bj_tpm_df = locusexpression_df[['locus_id_id', 'tpm']].merge(
+        locus_bj_df[['locus_id_id', 'circRNA_host']], left_on='locus_id_id', right_on='locus_id_id', how='outer').fillna(False)
+    locus_bj_tpm_data = {
+        'circRNA_host': np.log2(locus_bj_tpm_df[['tpm', 'circRNA_host']][locus_bj_tpm_df.circRNA_host]['tpm']+1).tolist(),
+        'not_circRNA_host': np.log2(locus_bj_tpm_df[['tpm', 'circRNA_host']][locus_bj_tpm_df.circRNA_host == False]['tpm']+1).tolist()
     }
 
     # Top X structure level abundance
@@ -501,8 +508,8 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
             'assembly': assembly.assembly_name,
             'sankey': sankey,
             'jpm_boxplot': jpm_boxplot,
-            'gene_vs_circrna_abundance_ratio': gene_vs_circrna_abundance_ratio,
             'gene_level_bj_cj_jpm': gene_level_bj_cj_jpm,
+            'locus_bj_tpm_data': locus_bj_tpm_data,
             'top_x_structure_data': top_x_structure_data,
             'top_x_gene_level_abundance': top_x_gene_level_abundance
             }
