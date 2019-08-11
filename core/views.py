@@ -149,7 +149,8 @@ def species_view_stats(request, species_id, assembly_id):
     sum_library_size = sample_df['library_size'].sum()
 
     # Total number of circRNA count / sum(library_size)
-    circrna_per_library_size = total_circrnas/sum_library_size
+    circrna_per_library_size = str(
+        round((total_circrnas/sum_library_size)*1000000, 2)) + ' X 10e-6'
 
     # circRNA per sample
     circrna_per_sample = total_circrnas/count_total_samples
@@ -158,8 +159,8 @@ def species_view_stats(request, species_id, assembly_id):
     count_backsplice_junctions = len(bj_df)
 
     # Number of circRNA producing genes
-    count_circrna_producing_genes = len(
-        locus_df[locus_df['is_circrna_host'] == True])
+    count_circrna_producing_genes = locus_df[['locus_id', 'gene_name']].merge(
+        bj_df[['locus_id_id']], left_on='locus_id', right_on='locus_id_id')['gene_name'].nunique()
 
     # Histogram for number of genes per number of circRNAs
     locus_bj_merged_circRNA_count_df = locus_df[['locus_id']].merge(bj_df[['locus_id_id', 'coord_id']], left_on='locus_id', right_on='locus_id_id')[
@@ -420,12 +421,12 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
     sankey_labels = ['Library size ({})'.format(library_size),
                      'Total spliced reads ({})'.format(total_spliced_reads),
                      'Canonical spliced reads ({})'.format(
-                         canonical_spliced_reads),
-                     'Backspliced reads ({})'.format(backspliced_reads),
-                     'Unmapped reads ({})'.format(unmapped_reads),
-                     'Chimeric reads ({})'.format(chimeric_reads),
-                     'Non spliced reads ({})'.format(non_spliced_reads)
-                     ]
+        canonical_spliced_reads),
+        'Backspliced reads ({})'.format(backspliced_reads),
+        'Unmapped reads ({})'.format(unmapped_reads),
+        'Chimeric reads ({})'.format(chimeric_reads),
+        'Non spliced reads ({})'.format(non_spliced_reads)
+    ]
 
     sankey_values = [int(sample.total_spliced_reads or 0),
                      int(sample.total_spliced_reads or 0) -
@@ -434,12 +435,16 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
                      int(sample.mapped_reads or 0),
                      int(sample.chimeric_reads or 0),
                      int(
-                         sample.backspliced_reads or bj_df['junction_id'].size),
-                     int(sample.mapped_reads or 0) -
-                     int(sample.total_spliced_reads or 0)
-                     ]
+        sample.backspliced_reads or bj_df['junction_id'].size),
+        int(sample.mapped_reads or 0) -
+        int(sample.total_spliced_reads or 0)
+    ]
     sankey = {'sankey_labels': sankey_labels,
               'sankey_values': sankey_values}
+
+    # Gene level AR dist plot
+    gene_level_ar_sum = np.log2(locus_df[['gene_name', 'locus_id']].merge(bj_df[['locus_id_id', 'abundance_ratio', 'coord_id']], left_on='locus_id', right_on='locus_id_id')[
+        ['gene_name', 'abundance_ratio', 'coord_id']].drop_duplicates()[['gene_name', 'abundance_ratio']].groupby('gene_name')['abundance_ratio'].sum().tolist())
 
     # JPM boxplot for circRNAs and canonical junction
     bj_jpm_list = np.log2(bj_df[['coord_id', 'jpm']].groupby(
@@ -481,7 +486,7 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
 
     # Top X structure level abundance
     top_x_structure_df = pd.merge(locus_df[['locus_id', 'stable_id', 'gene_name']], bj_df[[
-                                  'locus_id_id', 'tpm', 'jpm', 'abundance_ratio', 'coord_id', 'gc_perc', 'raw_count', 'n_methods']], left_on='locus_id', right_on='locus_id_id')
+        'locus_id_id', 'tpm', 'jpm', 'abundance_ratio', 'coord_id', 'gc_perc', 'raw_count', 'n_methods']], left_on='locus_id', right_on='locus_id_id')
     top_x_structure_df[['abundance_ratio']
                        ] = top_x_structure_df[['abundance_ratio']]*100
     top_x_structure_df = top_x_structure_df.round(3)
@@ -507,6 +512,7 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
     data = {'species': species.scientific_name,
             'assembly': assembly.assembly_name,
             'sankey': sankey,
+            'gene_level_ar_sum': gene_level_ar_sum,
             'jpm_boxplot': jpm_boxplot,
             'gene_level_bj_cj_jpm': gene_level_bj_cj_jpm,
             'locus_bj_tpm_data': locus_bj_tpm_data,
