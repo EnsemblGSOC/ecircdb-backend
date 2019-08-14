@@ -353,7 +353,6 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
     except:
         return Response(data={'error': 'No species with the given id.'},
                         status=status.HTTP_404_NOT_FOUND)
-
     try:
         assembly = species.assemblies.get(assembly_id=assembly_id)
     except:
@@ -395,6 +394,18 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
         str(analysis_df["analysis_id"].to_list())[1:-1])
     bj_df = pd.read_sql_query(bj_query, connection)
 
+    # Extract the path for quality report
+    common_name = species.common_name
+    common_name = common_name.lower().split(' ')
+    common_name = '_'.join(common_name)
+    if sample.fastqc_path:
+        fastqc_path = sample.fastqc_path
+        fastqc_path = fastqc_path.split(common_name)[-1]
+        fastqc_path = '/media/' + common_name + fastqc_path
+    else:
+        fastqc_path = '/media/fastq_export/' + common_name
+
+    # Sankey Flow
     lib_size = int(sample.library_size or 0)
     library_size = str(
         round((int(sample.library_size or 0)/lib_size*100), 2))+'%'
@@ -506,6 +517,7 @@ def sample_view_stats(request, species_id, assembly_id, sample_id):
 
     data = {'species': species.scientific_name,
             'assembly': assembly.assembly_name,
+            'fastqc_path': fastqc_path,
             'sankey': sankey,
             'gene_level_ar_sum': gene_level_ar_sum,
             'jpm_boxplot': jpm_boxplot,

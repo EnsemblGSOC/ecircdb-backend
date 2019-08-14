@@ -127,7 +127,9 @@ class BackspliceJunction(models.Model):
         blank=True,
         null=True
     )
-    gc_perc = models.IntegerField(
+    gc_perc = models.DecimalField(
+        max_digits=19,
+        decimal_places=6,
         blank=True,
         null=True
     )

@@ -30,7 +30,7 @@ class Sample(models.Model):
         blank=True,
         null=True
     )
-    fastq_path = models.CharField(
+    fastqc_path = models.CharField(
         max_length=255,
         blank=True,
         null=True
@@ -105,6 +105,15 @@ class Sample(models.Model):
         blank=True,
         null=True,
         related_name='samples'
+    )
+    fastq_path = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True
+    )
+    source_id = models.IntegerField(
+        blank=True,
+        null=True
     )
 
     def __str__(self):
