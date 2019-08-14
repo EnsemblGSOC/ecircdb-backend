@@ -12,7 +12,6 @@ from django.views.decorators.cache import cache_page
 from rest_framework import filters, generics, permissions, status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from sklearn.preprocessing import StandardScaler
 
 from core.models import Species, Assembly, Analysis, BackspliceJunction, Sample
 from core.serializers import SpeciesDetailSerializer, SpeciesListSerializer, SampleListSerializer, SampleDetailsSerializer
@@ -287,19 +286,15 @@ def species_view_stats(request, species_id, assembly_id):
 
     # Graph for tissue JPM box plot
     jpm_sample_merged_df = bj_sample_merged_df[['source', 'jpm']]
-    jpm_sample_merged_df.loc[:, 'jpm'] = np.log2(jpm_sample_merged_df['jpm']+1)
-    jpm_sample_grouped_df = jpm_sample_merged_df.groupby(['source'])[
-        'jpm'].apply(pd.DataFrame).fillna(0)
-    data = jpm_sample_grouped_df.values
-    scaler = StandardScaler()
-    scaler.fit(data)
-    data = scaler.transform(data)
-    scaled_data_df = pd.DataFrame(data, columns=source_list).fillna(0)
-    jpm_grouped_list = {}
+    jpm_grouped = {}
     for tissue in source_list:
-        jpm_grouped_list[tissue] = scaled_data_df[tissue].tolist()
+        data = jpm_sample_merged_df[jpm_sample_merged_df.source ==
+                                    tissue]['jpm'].values
+        data = np.log2(data)
+        jpm_grouped[tissue] = [(x - np.mean(data)) /
+                               np.std(data) for x in data]
     jpm_tissue_boxplot = {
-        'jpm_grouped': jpm_grouped_list,
+        'jpm_grouped': jpm_grouped,
         'tissue_list': source_list
     }
 
@@ -541,20 +536,24 @@ def location_view_stats(request, species_id, assembly_id):
         return Response(data={'error': 'No assembly with the given id under the given species.'}, status=status.HTTP_404_NOT_FOUND)
 
     # List of all locus for a given assembly
-    locus_query = 'select locus_id from core_locus where assembly_id_id={};'.format(
+    locus_query = 'select locus_id, seq_region_name, seq_region_start, seq_region_end, gene_name from core_locus where assembly_id_id={};'.format(
         assembly.assembly_id)
     locus_df = pd.read_sql_query(locus_query, connection)
 
     # List of all backsplice junctions related to given assembly
-    bj_query = 'select seq_region_name, abundance_ratio from core_backsplicejunction where locus_id_id in ({})'.format(
+    bj_query = 'select seq_region_name, abundance_ratio, coord_id, locus_id_id from core_backsplicejunction where locus_id_id in ({})'.format(
         str(locus_df["locus_id"].to_list())[1:-1])
     bj_df = pd.read_sql_query(bj_query, connection)
 
     chromosomes = bj_df[['seq_region_name', 'abundance_ratio']].groupby(
         ['seq_region_name']).mean().nlargest(10, ['abundance_ratio']).index.tolist()
 
+    genes = locus_df[['seq_region_name', 'seq_region_start', 'seq_region_end', 'gene_name', 'locus_id']].merge(bj_df[['locus_id_id', 'coord_id']], left_on='locus_id', right_on='locus_id_id').groupby(
+        ['gene_name', 'seq_region_name', 'seq_region_start', 'seq_region_end']).agg({'coord_id': 'count'}).reset_index().sort_values(by='coord_id', ascending=False)[['gene_name', 'seq_region_name', 'seq_region_start', 'seq_region_end']].to_dict('records')
+
     data = {
         'chromosomes': chromosomes,
+        'genes': genes
     }
 
     return Response(data=data, status=status.HTTP_200_OK)
@@ -717,7 +716,7 @@ def get_genome(request, species_id, assembly_id):
     scientific_name = scientific_name.lower().split(' ')
     scientific_name = '_'.join(scientific_name)
 
-    url = 'https://rest.ensembl.org//info/assembly/{}?bands=1'.format(
+    url = 'https://rest.ensembl.org/info/assembly/{}?bands=1'.format(
         scientific_name)
     headers = {'Content-Type': 'application/json'}
 
@@ -738,7 +737,68 @@ def get_genome(request, species_id, assembly_id):
     return Response(data=genome, status=status.HTTP_200_OK)
 
 
-def circrna_track(request, species_id, assembly_id, position):
+def gene_track_bed(request, species_id, assembly_id, position):
+    """
+    View to generate bed file to include gene tracks to the genoverse
+    """
+
+    try:
+        species = Species.objects.get(taxon_id=species_id)
+    except:
+        raise Http404('No species with the given id.')
+
+    try:
+        assembly = species.assemblies.get(assembly_id=assembly_id)
+    except:
+        raise Http404('No assembly with the given id under the given species.')
+
+    # Get location using url parameters
+    chromosome = position.split(':')[0]
+    start = position.split(':')[1].split('-')[0]
+    end = position.split(':')[1].split('-')[1]
+
+    # List of all locus for a given assembly
+    locus_query = 'select browser_string from core_locus where assembly_id_id={} and seq_region_name={} and seq_region_start>={} and seq_region_end<={};'.format(
+        assembly.assembly_id, chromosome, start, end)
+    locus_df = pd.read_sql_query(locus_query, connection)
+
+    def convert_to_josn(x):
+        x = x.split('\t')
+        data = {
+            'chromosome': x[0],
+            'start': int(x[1]),
+            'end': int(x[2]),
+            'name': 'ENSRNOT00000066509.4',
+            'score': int(x[4]),
+            'strand': x[5],
+            'thickStart': int(x[1]) + 1,
+            'thickEnd': int(x[2]) - 1,
+            'itemRgb': '255,0,0',
+            'blockCount': int(x[9]),
+            'blockSizes': x[10] + ',',
+            'blockStarts': x[11] + ',',
+        }
+        return data
+
+    browser_string_array = locus_df['browser_string'].unique()
+    browser_string_array = ['chr'+x for x in browser_string_array]
+    browser_string_series = pd.Series(browser_string_array)
+    browser_string_json_series = browser_string_series.apply(
+        lambda x: convert_to_josn(x))
+    browser_string_json = browser_string_json_series.tolist()
+    browser_string_df = pd.DataFrame(browser_string_json)
+    cols = ['chromosome', 'start', 'end', 'name', 'score', 'strand',
+            'thickStart', 'thickEnd', 'itemRgb', 'blockCount', 'blockSizes', 'blockStarts']
+    browser_string_df = browser_string_df[cols]
+
+    response = HttpResponse(content_type='text/bed')
+    browser_string_df.to_csv(
+        path_or_buf=response, sep='\t', index=False, index_label=False, header=False)
+
+    return response
+
+
+def circrna_track_bed(request, species_id, assembly_id, position):
     """
     View to generate bed file to include circRNA tracks to the genoverse
     """
@@ -771,29 +831,34 @@ def circrna_track(request, species_id, assembly_id, position):
     def convert_to_josn(x):
         x = x.split('\t')
         data = {
-            'seq_region_name': x[0],
+            'chromosome': x[0],
             'start': int(x[1]),
             'end': int(x[2]),
-            'name': x[3],
+            'name': 'ENSRNOT00000066509.4',
             'score': int(x[4]),
             'strand': x[5],
-            'thickStart': int(x[6]),
-            'thickEnd': int(x[7]),
-            'itemRgb': x[8],
+            'thickStart': int(x[1]) + 1,
+            'thickEnd': int(x[2]) - 1,
+            'itemRgb': '52,0,255',
             'blockCount': int(x[9]),
-            'blockSizes': x[10],
-            'blockStarts': x[11]
+            'blockSizes': x[10] + ',',
+            'blockStarts': x[11] + ',',
         }
         return data
 
     browser_string_array = bj_df['browser_string'].unique()
+    browser_string_array = ['chr'+x for x in browser_string_array]
     browser_string_series = pd.Series(browser_string_array)
     browser_string_json_series = browser_string_series.apply(
         lambda x: convert_to_josn(x))
     browser_string_json = browser_string_json_series.tolist()
-    # bed_data = browser_string_series.str.cat(sep='\n')
+    browser_string_df = pd.DataFrame(browser_string_json)
+    cols = ['chromosome', 'start', 'end', 'name', 'score', 'strand',
+            'thickStart', 'thickEnd', 'itemRgb', 'blockCount', 'blockSizes', 'blockStarts']
+    browser_string_df = browser_string_df[cols]
 
-    response = HttpResponse(json.dumps(browser_string_json),
-                            content_type='application/json')
+    response = HttpResponse(content_type='text/bed')
+    browser_string_df.to_csv(
+        path_or_buf=response, sep='\t', index=False, index_label=False, header=False)
 
     return response

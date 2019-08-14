@@ -20,8 +20,10 @@ urlpatterns = [
     path('export_sample_view_list/<int:species_id>/<int:assembly_id>/<int:sample_id>/',
          views.export_sample_view_list),
     path('get_genome/<int:species_id>/<int:assembly_id>/', views.get_genome),
-    path('circrna_track/<int:species_id>/<int:assembly_id>/<str:position>/',
-         views.circrna_track)
+    path('gene_track_bed/<int:species_id>/<int:assembly_id>/<str:position>/',
+         views.gene_track_bed),
+    path('circrna_track_bed/<int:species_id>/<int:assembly_id>/<str:position>/',
+         views.circrna_track_bed)
 ]
 
 # urlpatterns = format_suffix_patterns(urlpatterns)
