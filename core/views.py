@@ -320,7 +320,7 @@ def species_view_stats(request, species_id, assembly_id):
             'assembly': assembly.assembly_name,
             'count_total_samples': count_total_samples,
             'count_distinct_tissues': count_distinct_tissues,
-            'count_backsplice_junctions': count_backsplice_junctions,
+            'total_circrnas': total_circrnas,
             'circrna_per_library_size': circrna_per_library_size,
             'circrna_per_sample': circrna_per_sample,
             'count_circrna_producing_genes': count_circrna_producing_genes,
