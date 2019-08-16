@@ -8,4 +8,3 @@ from core.models.locus_expression import LocusExpression
 from core.models.canonical_junction import CanonicalJunction
 from core.models.backsplice_junction import BackspliceJunction
 from core.models.ensembl_gene import EnsemblGene
-from core.models.hibernate_sequences import HibernateSequences
