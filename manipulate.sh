@@ -43,18 +43,18 @@ tableaddedfields[7]="INSERT INTO \`core_sample\` (sample_id, accession, backspli
 tableaddedfields[8]="INSERT INTO \`core_species\` (taxon_id, scientific_name) VALUES"
 tableaddedfields[9]="INSERT INTO \`core_ensemblgene\` (gene_id, coord_id, seq_region_end, seq_region_name, seq_region_start, seq_region_strand, gene_name, description, is_circrna_host, biotype, stable_id, assembly_id_id) VALUES"
 
-sed -ri "s|\) ENGINE=InnoDB AUTO_INCREMENT=[0-9]+ DEFAULT CHARSET=latin1;||g" db.txt
+sed -ri "s|\) ENGINE=InnoDB AUTO_INCREMENT=[0-9]+ DEFAULT CHARSET=latin1;||g" db.sql
 
 # Change table names
 for index in ${!addcore[*]}
 do
-    sed -i "s|${addcore[$index]}|${addedcore[$index]}|" db.txt
-    echo $((index + 192))
+    sed -i "s|${addcore[$index]}|${addedcore[$index]}|" db.sql
+    echo $((index))
 done
 
 # Change table field names
 for index in ${!tablemissingfields[*]}
 do
-    sed -i "s|${tablemissingfields[$index]}|${tableaddedfields[$index]}|" db.txt
-    echo $((index + 210))
+    sed -i "s|${tablemissingfields[$index]}|${tableaddedfields[$index]}|" db.sql
+    echo $((index + 10))
 done
