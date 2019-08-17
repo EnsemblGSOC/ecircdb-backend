@@ -12,6 +12,8 @@ from django.views.decorators.cache import cache_page
 from rest_framework import filters, generics, permissions, status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 
 from core.models import Species, Assembly, Analysis, BackspliceJunction, Sample
 from core.serializers import SpeciesDetailSerializer, SpeciesListSerializer, SampleListSerializer, SampleDetailsSerializer
@@ -75,8 +77,17 @@ class SampleList(generics.ListAPIView):
         """
         species_id = self.kwargs['species_id']
         assembly_id = self.kwargs['assembly_id']
-        sample_id_list = Analysis.objects.filter(
-            assembly_id=assembly_id).values_list('sample_id', flat=True)
+
+        analysis_query = 'select sample_id_id, analysis_id from core_analysis where assembly_id_id={};'.format(
+            assembly_id)
+        analysis_df = pd.read_sql_query(analysis_query, connection)
+
+        bj_query = 'select analysis_id_id from core_backsplicejunction where analysis_id_id in ({})'.format(
+            str(analysis_df["analysis_id"].to_list())[1:-1])
+        bj_df = pd.read_sql_query(bj_query, connection)
+
+        sample_id_list = analysis_df.merge(bj_df, left_on='analysis_id', right_on='analysis_id_id')[
+            ['sample_id_id', 'analysis_id']].groupby('sample_id_id').count().index.tolist()
         return Sample.objects.filter(species_id=species_id, sample_id__in=sample_id_list)
 
 
@@ -136,7 +147,9 @@ def species_view_stats(request, species_id, assembly_id):
     distinct_tissues = sample_df['source'].unique().tolist()
 
     # Total number of samples for the given assembly
-    count_total_samples = len(sample_df.index)
+    sample_id_list = analysis_df.merge(bj_df, left_on='analysis_id', right_on='analysis_id_id')[
+        ['sample_id_id', 'analysis_id']].groupby('sample_id_id').count().index.tolist()
+    count_total_samples = len(sample_id_list)
 
     # Count of the number of distinct tissues scanned for the assembly
     count_distinct_tissues = len(distinct_tissues)
@@ -148,14 +161,10 @@ def species_view_stats(request, species_id, assembly_id):
     sum_library_size = sample_df['library_size'].sum()
 
     # Total number of circRNA count / sum(library_size)
-    circrna_per_library_size = str(
-        round((total_circrnas/sum_library_size)*1000000, 2)) + ' X 10e-6'
+    average_library_size = str(sum_library_size//count_total_samples)
 
     # circRNA per sample
     circrna_per_sample = total_circrnas/count_total_samples
-
-    # Count of backsplice junctions related to the given assembly
-    count_backsplice_junctions = len(bj_df)
 
     # Number of circRNA producing genes
     count_circrna_producing_genes = locus_df[['locus_id', 'gene_name']].merge(
@@ -186,14 +195,45 @@ def species_view_stats(request, species_id, assembly_id):
         "count": circRNA_per_locus_df["count"].to_list()
     }
 
-    # Pie chart for circRNA classification
-    values = bj_df[['classification', 'coord_id']].groupby(
-        ['classification'])['coord_id'].nunique().tolist()
-    labels = bj_df[['classification', 'coord_id']].groupby(
-        ['classification'])['coord_id'].nunique().keys().tolist()
-    circrna_classification = {
-        'values': values,
-        'labels': labels
+    # Scatter plot for sample clustering
+    analysis_dict = analysis_df[['analysis_id',
+                                 'sample_id_id']].to_dict('records')
+    sample_tpm_df = pd.DataFrame(columns=['coord_id'])
+    for x in analysis_dict:
+        df_for_sample = bj_df[['coord_id', 'tpm', 'analysis_id_id']
+                              ][bj_df.analysis_id_id == x['analysis_id']][['tpm', 'coord_id']]
+        df_for_sample = df_for_sample.rename(
+            columns={'tpm': x['sample_id_id']})
+        sample_tpm_df = sample_tpm_df.merge(
+            df_for_sample, left_on='coord_id', right_on='coord_id', how='outer')
+        # print(sample_tpm_df)
+    sample_tpm_df = sample_tpm_df.drop_duplicates().fillna(0)
+    sample_tpm_df.set_index('coord_id', inplace=True)
+    sample_tpm_df = sample_tpm_df.T
+    sclaer = StandardScaler(with_mean=False)
+    S = sclaer.fit_transform(sample_tpm_df)
+    pca = PCA(n_components=2)
+    Y = pca.fit_transform(S)
+    Y_df = pd.DataFrame(Y, columns=['x', 'y'])
+    Y_tissue_list = analysis_df[['sample_id_id']].merge(
+        sample_df[['sample_id', 'source']], left_on='sample_id_id', right_on='sample_id')['source']
+    Y_sample_accession_list = analysis_df[['sample_id_id']].merge(
+        sample_df[['sample_id', 'accession']], left_on='sample_id_id', right_on='sample_id')['accession']
+    Y_df['tissue'] = Y_tissue_list
+    Y_df['text'] = Y_sample_accession_list
+    Y_df_y = Y_df.groupby('tissue')['y'].apply(list)
+    Y_df_x = Y_df.groupby('tissue')['x'].apply(list)
+    Y_df_text = Y_df.groupby('tissue')['text'].apply(list)
+    Y_df_dict = {}
+    for tissue in Y_tissue_list.unique().tolist():
+        Y_df_dict[tissue] = {
+            'y': Y_df_y[tissue],
+            'x': Y_df_x[tissue],
+            'text': Y_df_text[tissue]
+        }
+    sample_cluster = {
+        'tissue_list': Y_tissue_list.unique().tolist(),
+        'data': Y_df_dict
     }
 
     # Pie chart/Treemap for circRNA n_methods
@@ -321,12 +361,12 @@ def species_view_stats(request, species_id, assembly_id):
             'count_total_samples': count_total_samples,
             'count_distinct_tissues': count_distinct_tissues,
             'total_circrnas': total_circrnas,
-            'circrna_per_library_size': circrna_per_library_size,
+            'average_library_size': average_library_size,
             'circrna_per_sample': circrna_per_sample,
             'count_circrna_producing_genes': count_circrna_producing_genes,
             'circRNA_per_locus': circRNA_per_locus,
             'gene_count_per_circrna_count': gene_count_per_circrna_count,
-            'circrna_classification': circrna_classification,
+            'sample_cluster': sample_cluster,
             'circrna_n_methods': circrna_n_methods,
             'circrna_n_exons': circrna_n_exons,
             'tpm_tissue_boxplot': tpm_tissue_boxplot,
