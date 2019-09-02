@@ -14,12 +14,6 @@ class Locus(models.Model):
     browser_string = models.TextField(
         blank=True
     )
-    circrna_abundance_ratio = models.DecimalField(
-        max_digits=19,
-        decimal_places=6,
-        blank=True,
-        null=True
-    )
     coord_id = models.CharField(
         max_length=255,
         blank=True,
@@ -79,11 +73,6 @@ class Locus(models.Model):
         null=True
     )
     total_splice_reads = models.IntegerField(
-        blank=True,
-        null=True
-    )
-    biotype = models.CharField(
-        max_length=255,
         blank=True,
         null=True
     )

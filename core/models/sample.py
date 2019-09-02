@@ -106,15 +106,6 @@ class Sample(models.Model):
         null=True,
         related_name='samples'
     )
-    fastq_path = models.CharField(
-        max_length=255,
-        blank=True,
-        null=True
-    )
-    source_id = models.IntegerField(
-        blank=True,
-        null=True
-    )
 
     def __str__(self):
         return self.accession
